@@ -52,7 +52,7 @@
 | 项 | 内容 |
 | --- | --- |
 | 命令 | `scripts/pack.ps1 -GamePath <游戏目录>` |
-| 结果 | **通过**：`release/StardewAgentBridge-0.1.0/`，20 个文件、2.3 MB，含 `CHECKSUMS.txt`；禁止文件审计通过（无游戏 DLL / 存档 / 凭据 / `node_modules`） |
+| 结果 | **通过**：`release/StardewAgentBridge-0.1.0/`，23 个文件、2.31 MB，含 `CHECKSUMS.txt`；禁止文件审计通过（无游戏 DLL / 存档 / 凭据 / `node_modules`） |
 | 独立运行 | 在发布目录内 `node server\bridge.mjs doctor` → `Web 产物：已构建`；`node server\bridge.mjs start` → `GET /` 200、`GET /app.js` 200，说明单文件 server 能自己找到同级的 `web/` |
 | 附带修复 | 打包脚本三处真实缺陷已修：① `.ps1` 需 UTF-8 BOM（否则 Windows PowerShell 5.1 按 ANSI 解析中文字符串报语法错）；② `--outfile=(Join-Path …)` 会被拆成两个参数；③ `@array` splat 会按位置传参把游戏路径喂给 `-Configuration` |
 

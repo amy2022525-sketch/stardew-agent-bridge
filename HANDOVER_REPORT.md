@@ -25,7 +25,7 @@
 | stdio 适配器 | `adapters/stdio/` | 通过（与 HTTP 一致性测试） |
 | 测试（10 套件 34 项，模拟 Mod） | `tests/` | 34/34 通过 |
 | 脚本（构建/安装/回滚/打包/自检） | `scripts/*.mjs`、`scripts/*.ps1` | 全部实跑通过 |
-| 发布目录 | `release/StardewAgentBridge-0.1.0/`（20 文件，2.3 MB，含 `CHECKSUMS.txt`） | 已生成，可独立运行 |
+| 发布目录 | `release/StardewAgentBridge-0.1.0/`（23 文件，2.31 MB，含 `CHECKSUMS.txt`） | 已生成，可独立运行 |
 | 文档 | `README.md`、`README.en.md`、`docs/{PROTOCOL,CLIENTS,TROUBLESHOOTING,EVIDENCE,ACCEPTANCE,MIGRATION}.md`、`CHANGELOG.md` | 已按实现重写 |
 | 本报告 + 发布检查清单 | `HANDOVER_REPORT.md`、`RELEASE_CHECKLIST.md` | 本文件 |
 
@@ -96,7 +96,7 @@ Agent 宿主 ──(MCP: HTTP / stdio 适配器)──► Bridge ──(本机 W
 | E3 | `dotnet build`（真实游戏 DLL） | 通过，**0 警告 0 错误** |
 | E4 | Bridge 实进程 + Web 静态 | `/health` `/` `/app.js` `/styles.css` 全 200 |
 | E5 | 真实 HTTP MCP 往返（`scripts/smoke.mjs`） | 28 工具；`status` 正常；无游戏时 `snapshot` 正确返回 `GAME_UNAVAILABLE` |
-| E6 | `scripts/pack.ps1` | 发布目录 20 文件 2.3 MB，禁止文件审计通过，包内 server 可独立运行 |
+| E6 | `scripts/pack.ps1` | 发布目录 23 文件 2.31 MB，禁止文件审计通过，包内 server 可独立运行 |
 | E7 | 实机 A1–A8 | **待执行**（原因见 §5） |
 
 实现期通过上述流程发现并修掉 4 个真实缺陷（去重键、令牌热加载、`unknown` 状态映射、打包脚本三处 Windows PowerShell 兼容问题），均已记录在 `CHANGELOG.md`。
