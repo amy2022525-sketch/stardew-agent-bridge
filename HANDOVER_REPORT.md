@@ -195,7 +195,18 @@ node apps/server/dist/cli.js hosts --host dsh --transport http   # 粘到 DSH �
 
 ---
 
-## 9. 结论
+## 9. 提交记录
+
+| 提交 | 内容 |
+| --- | --- |
+| `cf9c704` | 初始化 Stardew Agent Bridge 0.1.0：Mod、契约、核心、MCP 双通道、Web、测试、脚本、文档（101 个文件） |
+| 后续提交 | 对齐 `ModHello.watchdog.lastHeartbeatAt` 与 `ModStopResult.command` 两个字段（静态契约核对发现），仅 Mod 侧两行级修改 |
+
+工作区干净：`git status` 无未提交内容；`release/`、`artifacts/`、`node_modules/` 均被 `.gitignore` 排除。
+
+---
+
+## 10. 结论
 
 - **工程与自动化验收已闭环**：协议、控制权、幂等、故障语义、MCP 双通道、Web、打包、文档都有可复现证据。
 - **剩下的是实机验证这一件"只能在你机器上做"的事**，步骤与判定标准已写成清单，不需要再做设计决策。

@@ -195,6 +195,7 @@ public sealed class ModEntry : Mod
                 {
                     kind = "status",
                     activeActionId = (string?)null,
+                    command = (string?)null,
                     stopped,
                     releasedInputs = released,
                     pause = ControlAuthority.PauseState(control.SelfPauseOpened),
@@ -323,7 +324,7 @@ public sealed class ModEntry : Mod
             controller = control.HolderName,
             lease = new { held = control.HolderName != null, holderName = control.HolderName, expiresAt = control.ExpiresAt?.ToString("o") },
             pause = ControlAuthority.PauseState(control.SelfPauseOpened),
-            watchdog = new { bridgeLinkUp, linkTimeoutSeconds = config.LinkTimeoutSeconds, lastFrameAt = server?.LastFrameAt?.ToString("o") },
+            watchdog = new { bridgeLinkUp, lastHeartbeatAt = server?.LastFrameAt?.ToString("o"), linkTimeoutSeconds = config.LinkTimeoutSeconds },
             window = new { active = GameRunner.instance.IsActive, title = Game1.game1?.Window?.Title },
             realtimeInput = RealtimeActions.InputStatus,
             features = new
