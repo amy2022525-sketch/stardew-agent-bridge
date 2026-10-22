@@ -36,6 +36,11 @@ const els = {
 
 let csrfToken = '';
 let currentStatus: BridgeStatus | null = null;
+let actionNotice: string | null = null;
+function showNotice(text: string): void {
+    actionNotice = text;
+    els.statusNotice.textContent = text;
+}
 
 function setKv(target: HTMLElement, pairs: [string, string][]): void {
     target.innerHTML = '';
@@ -92,7 +97,7 @@ function renderStatus(): void {
         ['在线客户端', status.clients.map((client) => `${client.clientName}(${client.transport})`).join('、') || '（无）'],
         ['服务端口', String(status.port)]
     ]);
-    els.statusNotice.textContent = status.notice ?? '';
+    els.statusNotice.textContent = actionNotice ?? status.notice ?? '';
     renderControl();
     renderNotes();
 }
@@ -204,10 +209,11 @@ function wire(): void {
         const button = document.getElementById(id);
         button?.addEventListener('click', () => {
             void (async () => {
+                actionNotice = null;
                 try {
                     await handler();
                 } catch (error) {
-                    els.statusNotice.textContent = `${error instanceof Error ? error.message : String(error)}`;
+                    showNotice(`${error instanceof Error ? error.message : String(error)}`);
                 } finally {
                     await refreshStatus();
                 }
@@ -225,22 +231,22 @@ function wire(): void {
             method: 'POST',
             body: JSON.stringify({ reason: 'web' })
         });
-        els.statusNotice.textContent = `已接管：关闭 ${result.closedSessionIds.length} 个会话，暂停状态 ${result.pause.state}。`;
+        showNotice(`已接管：关闭 ${result.closedSessionIds.length} 个会话，暂停状态 ${result.pause.state}。`);
     });
     on('btn-end', async () => {
         await api('/api/v1/control/end', { method: 'POST', body: '{}' });
     });
     on('btn-stop', async () => {
         const result = await callTool('stardew_stop', {});
-        els.statusNotice.textContent = result.text;
+        showNotice(result.text);
     });
     on('btn-pause', async () => {
         const result = await callTool('stardew_pause', {});
-        els.statusNotice.textContent = result.text;
+        showNotice(result.text);
     });
     on('btn-closemenu', async () => {
         const result = await callTool('stardew_closemenu', {});
-        els.statusNotice.textContent = result.text;
+        showNotice(result.text);
     });
     on('btn-screenshot', async () => {
         const response = await fetch('/api/v1/screenshot');
@@ -264,7 +270,7 @@ function wire(): void {
     });
     on('btn-copy', async () => {
         await navigator.clipboard.writeText(els.hostSnippet.textContent ?? '');
-        els.statusNotice.textContent = '配置已复制到剪贴板（含令牌，请勿粘贴到公开位置）。';
+        showNotice('配置已复制到剪贴板（含令牌，请勿粘贴到公开位置）。');
     });
     on('btn-diag', async () => {
         const data = await api<Record<string, unknown>>('/api/v1/diagnostics');
@@ -272,7 +278,7 @@ function wire(): void {
     });
     on('btn-bundle', async () => {
         const data = await api<{ file: string; note: string }>('/api/v1/diagnostics/export', { method: 'POST', body: '{}' });
-        els.statusNotice.textContent = `问题包已导出：${data.file}（${data.note}）`;
+        showNotice(`问题包已导出：${data.file}（${data.note}）`);
     });
 }
 

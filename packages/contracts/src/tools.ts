@@ -48,7 +48,7 @@ const ACTION_ID_PROP = {
 const CONTROL_SESSION_PROP = {
     type: 'string',
     description:
-        '控制会话 ID（stardew_session operation=start 返回）。省略时若该客户端恰好只有一个活动控制会话则自动使用；零个或多个时返回 CONTROL_REQUIRED，不会隐式跨聊天共用会话。'
+        '控制会话 ID（stardew_session operation=start 返回）。省略时使用该 clientId 唯一活动控制会话；零个或多个时返回 CONTROL_REQUIRED。同一 clientId 的聊天可能共享该会话，独立控制者应使用不同 clientId 并显式传入会话 ID。'
 };
 
 function writeSchema(properties: JsonSchema, required: string[] = []): JsonSchema {
@@ -133,7 +133,7 @@ export const TOOLS: readonly ToolSpec[] = [
             '读取 Bridge 侧状态：当前控制者与会话、在途动作、未决动作、最近收据、暂停结果、账本可写性与 Mod 连接。用于返回丢失后核对，不会重新执行任何消费动作。',
         command: 'bridge:status',
         kind: 'read',
-        inputSchema: readSchema(),
+        inputSchema: readSchema({ actionId: { type: 'string', pattern: ACTION_ID_PATTERN, description: '查询该动作的原收据；不重放动作。' } }),
         annotations: annotations('读取控制与动作状态', true)
     },
     {

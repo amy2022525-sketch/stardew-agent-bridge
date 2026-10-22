@@ -56,11 +56,13 @@ if (-not $SkipRestore) {
 }
 
 Write-Host "[build-mod] 编译（$Configuration）…"
-& dotnet build $project -c $Configuration -p:GamePath="$resolved" --no-restore | Out-Host
+& dotnet build $project -c $Configuration -p:GamePath="$resolved" -p:UseSharedCompilation=false --no-restore | Out-Host
 if ($LASTEXITCODE -ne 0) { throw 'dotnet build 失败。' }
 
 $outDir = Join-Path $repo "mods\StardewAgentBridge\bin\$Configuration\net6.0"
 $artifact = Join-Path $repo 'artifacts\mod\StardewAgentBridge'
+. (Join-Path $PSScriptRoot 'mod-install-common.ps1')
+$artifact = Assert-SabChild -Path $artifact -Root (Join-Path $repo 'artifacts\mod')
 if (Test-Path $artifact) { Remove-Item $artifact -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $artifact | Out-Null
 Copy-Item (Join-Path $outDir 'StardewAgentBridge.dll') $artifact

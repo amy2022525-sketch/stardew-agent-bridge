@@ -13,7 +13,9 @@ import {
     hostHeaderValidationResponse,
     localhostAllowedHostnames,
     localhostAllowedOrigins,
-    originValidationResponse
+    originValidationResponse,
+    isLegacyRequest,
+    WebStandardStreamableHTTPServerTransport
 } from '@modelcontextprotocol/server';
 import {
     BRIDGE_VERSION,
@@ -39,8 +41,9 @@ import {
     writeWebResponse
 } from './http-util.js';
 import { Logger } from './logger.js';
-import { dataPaths, ensureDirs, resolveDataDir, type DataPaths } from './paths.js';
+import { dataPaths, ensureDirs, resolveDataDir, resolveStdioAdapter, type DataPaths } from './paths.js';
 import { serveStatic } from './static.js';
+import { redactDiagnostics } from './redact.js';
 
 export interface BridgeOptions {
     dataDir?: string;
@@ -70,6 +73,7 @@ export class Bridge {
     readonly actions: ActionService;
     readonly mod: ModClient;
     private readonly mcpHandler: ReturnType<typeof createMcpHandler>;
+    private readonly legacySessions = new Map<string, { clientId: string; server: ReturnType<typeof createToolServer>; transport: WebStandardStreamableHTTPServerTransport; lastUsedAt: number }>();
     private server: Server | null = null;
     private startedAt = new Date().toISOString();
     private readonly sessionToken: string;
@@ -133,6 +137,7 @@ export class Bridge {
                 modVersion: this.mod.hello?.modVersion ?? null
             });
         });
+        this.mod.on('heartbeat', () => this.control.fromHello(this.mod.hello));
         this.mod.on('disconnected', (reason: string) => {
             this.logger.warn(`Mod 连接断开：${reason}`);
             this.events.publish('mod_disconnected', { reason });
@@ -153,16 +158,19 @@ export class Bridge {
                             return this.actions.executeTool(toolName, args, ctx);
                         }
                     },
-                    resolveContext: (ctx) => {
-                        const info = (ctx as unknown as { authInfo?: { clientId?: string; extra?: Record<string, unknown> } }).authInfo;
-                        const clientId = typeof info?.clientId === 'string' ? info.clientId : 'unknown';
+                    resolveContext: () => {
+                        const info = requestContext.authInfo;
+                        if (!info?.clientId) throw new BridgeError('AUTH_FAILED', '缺少已认证的 MCP 调用者身份。');
+                        const clientId = info.clientId;
                         const clientName =
                             typeof info?.extra?.['clientName'] === 'string' ? (info.extra['clientName'] as string) : clientId;
-                        return { clientId, clientName, transport: 'http' };
+                        return { clientId, clientName, transport: 'http', signal: requestContext.requestInfo?.signal };
                     },
                     logger: (level, message, meta) => this.logger.log(level, message, meta)
                 }),
             {
+                legacy: 'reject',
+                responseMode: 'sse',
                 onerror: (error) => this.logger.error(`MCP 错误：${error.message}`)
             }
         ) as unknown as ReturnType<typeof createMcpHandler>;
@@ -207,6 +215,9 @@ export class Bridge {
     async stop(): Promise<void> {
         this.events.publish('bridge_stopping', {});
         this.control.stop();
+        await this.mcpHandler.close();
+        await Promise.all([...this.legacySessions.values()].map(async session => { await session.transport.close(); await session.server.close(); }));
+        this.legacySessions.clear();
         await this.mod.close();
         this.ledger.close();
         const server = this.server;
@@ -269,7 +280,9 @@ export class Bridge {
             sendJson(res, 413, { error: '请求体过大。' });
             return;
         }
-        const request = toWebRequest(req, body);
+        const abort = new AbortController();
+        res.once('close', () => { if (!res.writableFinished) abort.abort(); });
+        const request = toWebRequest(req, body, abort.signal);
         const rejected =
             hostHeaderValidationResponse(request, localhostAllowedHostnames()) ??
             originValidationResponse(request, localhostAllowedOrigins());
@@ -286,13 +299,57 @@ export class Bridge {
             return;
         }
         this.registry.touch(client.clientId, client.clientName, 'http');
-        const response = await this.mcpHandler.fetch(request, {
-            authInfo: {
-                token: client.credential.token,
-                clientId: client.clientId,
-                scopes: ['stardew'],
-                extra: { clientName: client.clientName }
+        const authInfo = {
+            token: client.credential.token,
+            clientId: client.clientId,
+            scopes: ['stardew'],
+            extra: { clientName: client.clientName }
+        };
+        let parsedBody: unknown;
+        try { parsedBody = body.length ? JSON.parse(body.toString('utf8')) : undefined; } catch { /* SDK 返回规范化解析错误。 */ }
+        if (req.headers['mcp-session-id'] || await isLegacyRequest(request.clone(), parsedBody)) {
+            const sessionId = typeof req.headers['mcp-session-id'] === 'string' ? req.headers['mcp-session-id'] : undefined;
+            let session = sessionId ? this.legacySessions.get(sessionId) : undefined;
+            if (sessionId && (!session || session.clientId !== client.clientId)) {
+                sendJson(res, 404, { error: 'MCP 会话不存在或不属于该客户端，请重新连接。' });
+                return;
             }
+            if (!session) {
+                if ((parsedBody as { method?: string } | undefined)?.method !== 'initialize') {
+                    sendJson(res, 400, { error: '旧版 MCP 必须先 initialize 建立会话。' });
+                    return;
+                }
+                for (const [id, stale] of this.legacySessions) {
+                    if (Date.now() - stale.lastUsedAt > 15 * 60_000) {
+                        this.legacySessions.delete(id);
+                        await stale.transport.close();
+                        await stale.server.close();
+                    }
+                }
+                if (this.legacySessions.size >= 32) { sendJson(res, 429, { error: 'MCP 会话数达到上限，请关闭闲置客户端。' }); return; }
+                const id = randomUUID();
+                const server = createToolServer({
+                    serverInfo: { name: 'stardew-agent-bridge', version: BRIDGE_VERSION },
+                    executor: this.actions,
+                    resolveContext: () => ({ clientId: client.clientId, clientName: client.clientName, transport: 'http' })
+                });
+                const transport = new WebStandardStreamableHTTPServerTransport({
+                    sessionIdGenerator: () => id,
+                    onsessionclosed: () => { this.legacySessions.delete(id); }
+                });
+                session = { clientId: client.clientId, server, transport, lastUsedAt: Date.now() };
+                this.legacySessions.set(id, session);
+                try { await server.connect(transport); }
+                catch (error) { this.legacySessions.delete(id); throw error; }
+            }
+            session.lastUsedAt = Date.now();
+            const response = await session.transport.handleRequest(request, { authInfo, parsedBody });
+            await writeWebResponse(res, response);
+            return;
+        }
+        const response = await this.mcpHandler.fetch(request, {
+            authInfo,
+            parsedBody
         } as never);
         await writeWebResponse(res, response as Response);
     }
@@ -351,7 +408,9 @@ export class Bridge {
             }
             this.registry.touch(caller.clientId, caller.clientName, caller.transport);
             this.registry.countCall(caller.clientId);
-            const result = await this.actions.executeTool(toolName, args, caller);
+            const abort = new AbortController();
+            res.once('close', () => { if (!res.writableFinished) abort.abort(); });
+            const result = await this.actions.executeTool(toolName, args, { ...caller, signal: abort.signal });
             sendJson(res, 200, result);
             return;
         }
@@ -464,7 +523,7 @@ export class Bridge {
                 clientName: HOST_LABELS[host],
                 token: credential.token,
                 bridgeUrl: `http://127.0.0.1:${this.boundPort}/mcp`,
-                stdioAdapterPath: path.resolve(process.cwd(), 'adapters', 'stdio', 'dist', 'index.js'),
+                stdioAdapterPath: resolveStdioAdapter(),
                 nodeExecutable: process.execPath,
                 dataDir: this.paths.root
             });
@@ -557,7 +616,7 @@ export class Bridge {
 
     private buildDiagnosticsPreview(): Record<string, unknown> {
         const status = this.actions.getStatus();
-        return {
+        return redactDiagnostics({
             generatedAt: new Date().toISOString(),
             bridgeVersion: BRIDGE_VERSION,
             node: process.version,
@@ -573,7 +632,7 @@ export class Bridge {
             recentEvents: this.events.recent(50),
             recentReceipts: this.actions.recentReceipts(10),
             redaction: ['Bearer 令牌', '32 位以上十六进制串', '用户主目录路径', '存档标识']
-        };
+        }, this.paths) as Record<string, unknown>;
     }
 
     private exportProblemBundle(): string {

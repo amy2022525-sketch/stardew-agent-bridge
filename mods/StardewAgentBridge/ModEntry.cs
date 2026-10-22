@@ -115,6 +115,13 @@ public sealed class ModEntry : Mod
         if (server == null) return;
         background.BeforeUpdate();
 
+        if (control.HolderName != null && !control.LeaseValid)
+        {
+            actions.Stop("CANCELLED", "控制租约到期，已停止输入。");
+            control.Takeover();
+            control.TryOpenPauseMenu();
+        }
+
         // 游戏侧 watchdog：Bridge 失联时不等人，自己释放输入与动作。
         var last = server.LastFrameAt;
         bridgeLinkUp = last.HasValue && (DateTime.UtcNow - last.Value).TotalSeconds < config.LinkTimeoutSeconds;
@@ -220,7 +227,7 @@ public sealed class ModEntry : Mod
                 return;
             }
             if (r.Command == "inspect") { Reply(Response.Ok(r, observations.Inspect(Protocol.Text(r.Args, "target")), control.Epoch, Elapsed())); return; }
-            if (r.Command == "recipes")
+            if (r.Command == "recipes" || (r.Command == "container" && Protocol.Text(r.Args, "operation") == "list"))
             {
                 Reply(Response.Ok(r, InventoryActions.Read(r, observations) ?? throw new ActionFault("UNSUPPORTED", "配方读取未实现。"), control.Epoch, Elapsed()));
                 return;
@@ -241,7 +248,10 @@ public sealed class ModEntry : Mod
                 r,
                 pending.Peer,
                 started.AddMilliseconds(r.TimeoutMs),
-                () => GameActions.Create(r, observations, Helper.Reflection),
+                () => {
+                    control.ResumeOwnPause(r.Command);
+                    return GameActions.Create(r, observations, Helper.Reflection, control);
+                },
                 response => Send(pending, response));
         }
         catch (ActionFault error)
@@ -266,8 +276,7 @@ public sealed class ModEntry : Mod
                 var expiresAt = r.Args.TryGetProperty("leaseExpiresAt", out var raw) && DateTime.TryParse(raw.GetString(), out var parsed)
                     ? parsed.ToUniversalTime()
                     : DateTime.UtcNow.AddMinutes(3);
-                control.Acquire(holder, expiresAt);
-                control.SelfPauseOpened = false;
+                control.Acquire(holder, expiresAt, r.Args.TryGetProperty("mode", out _) ? Protocol.Text(r.Args, "mode") : "step");
                 return new { kind = "control", epoch = control.Epoch, holderName = control.HolderName, expiresAt = control.ExpiresAt?.ToString("o"), pause = ControlAuthority.PauseState(control.SelfPauseOpened) };
             }
             case "renew":
@@ -282,7 +291,7 @@ public sealed class ModEntry : Mod
             case "release":
             {
                 var epoch = Protocol.Integer(r.Args, "epoch");
-                control.Renew(epoch, control.ExpiresAt ?? DateTime.UtcNow);
+                control.AuthorizeWrite(epoch);
                 var pause = Protocol.Flag(r.Args, "pause");
                 actions.StopIfOwned(null);
                 control.Release(pause);
@@ -343,6 +352,7 @@ public sealed class ModEntry : Mod
     // 给每个响应挂上真实暂停状态；动作结果里已有的 effects 字段原样保留。
     private Response Decorate(Response response)
     {
+        if (config.PauseAfterEachStep && control.Mode == "step" && Context.IsWorldReady) control.TryOpenPauseMenu();
         var pause = ControlAuthority.PauseState(control.SelfPauseOpened);
         try
         {
@@ -352,7 +362,6 @@ public sealed class ModEntry : Mod
             if (node is JsonObject obj)
             {
                 obj["pause"] = JsonSerializer.SerializeToNode(pause, Protocol.Json);
-                if (response.Status == "succeeded" && config.PauseAfterEachStep && Context.IsWorldReady) control.TryOpenPauseMenu();
                 return response with { Result = obj };
             }
         }

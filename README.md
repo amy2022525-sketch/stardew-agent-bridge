@@ -1,5 +1,7 @@
 # Stardew Agent Bridge
 
+> 0.1.0 源码预览。2026-10-22 复核：46 项 Node 测试、17 项隔离 C# 检查、17 项安装脚本检查通过；真实游戏中的移动、箱子存取与去重、制作、放置，以及 Web 接管已验证。钓鱼/战斗、完整消费与跨日流程、三个真实宿主仍有待验收项。完整结果见 [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md)，尚未发布稳定版 Release。
+
 让**任意本地 MCP Agent**（DSH、Codex CLI、Claude Code……）观察并操作真实的星露谷游戏：一个 SMAPI Mod + 一个常驻本机 Bridge + 一个 Web 控制台，共用同一套游戏能力与同一份动作账本。
 
 - MCP 接口只是**连接方式**：不依赖任何具体 Agent、不绑定任何模型厂商，也不需要任何专用插件。
@@ -40,12 +42,12 @@ SMAPI Mod（游戏主线程）                      ← 唯一执行者
 
 ## 2. 快速开始（Windows，单人存档）
 
-前置：Windows 10/11、星露谷 1.6.15 + SMAPI 4.5.2、Node.js ≥ 22.5（用到内置 `node:sqlite`）、.NET SDK 6 以上（仅编译 Mod 时需要）。
+前置：Windows 10/11、星露谷 1.6.15 + SMAPI 4.5.2、Node.js ≥ 22.5（用到内置 `node:sqlite`）。源码构建与隔离 C# 测试使用 .NET SDK 10；游戏 Mod 的目标仍为 net6.0，并引用你本机的游戏程序集。
 
 1. **构建**（同时生成 Mod 与 Web 产物）
 
    ```powershell
-   npm install
+   npm ci
    npm run build
    $env:STARDEW_GAME_PATH = 'F:\SteamLibrary\steamapps\common\Stardew Valley'  # 按实际路径
    npm run build:mod
@@ -108,7 +110,7 @@ SMAPI Mod（游戏主线程）                      ← 唯一执行者
 
 ## 4. 安全边界
 
-- **只监听回环**：Bridge 只绑定 `127.0.0.1`，Mod 只绑定 `127.0.0.1`，两者都拒绝带 `Origin` 的请求（浏览器无法借本机端口操作游戏）。
+- **只监听回环**：Bridge 与 Mod 只绑定 `127.0.0.1`。Mod 拒绝带 `Origin` 的连接；Bridge 校验 Host 和本机 Origin，Web 写操作另需会话与 CSRF。
 - **凭据本机化**：令牌写在 `%LOCALAPPDATA%\StardewAgentBridge\credentials.json`（用户目录权限保护），不进仓库、不进日志、不进问题包；Mod 每次连接重新读取，轮换令牌**不需要重启游戏**。
 - **写者独占**：没有控制会话的写请求一律拒绝；租约到期、连接断开、换存档、人工接管都会让旧 `epoch` 失效。
 - **结果不明就停**：网络断开、超时、异常一律返回 `unknown` + `effectKnown=false`，指引 Agent 先查询/观察，**不允许**换新 ID 重放消费动作（同 `actionId` 不同参数会被 `IDEMPOTENCY_CONFLICT` 拒绝）。
@@ -131,7 +133,9 @@ SMAPI Mod（游戏主线程）                      ← 唯一执行者
 
 ```powershell
 npm run build      # tsc -b + Web 类型检查 + esbuild
-npm test           # 34 个测试（契约 / 控制权 / MCP HTTP / 故障注入），使用模拟 Mod
+npm test           # 46 个测试（契约 / 控制权 / MCP HTTP / 故障注入），使用模拟 Mod
+npm run test:mod   # 17 项真实 C# 控制源码隔离检查（不是游戏实测）
+npm run test:installer # 17 项 Windows 安装与回滚检查
 npm run clean
 npm run pack       # 生成 release\StardewAgentBridge-0.1.0\（含 CHECKSUMS.txt；不会上传）
 ```
@@ -144,10 +148,10 @@ npm run pack       # 生成 release\StardewAgentBridge-0.1.0\（含 CHECKSUMS.tx
 
 | 范围 | 状态 |
 | --- | --- |
-| 契约 / 控制权 / 账本去重 / MCP HTTP+stdio / 故障注入（模拟 Mod） | **已通过** 34/34 |
+| 契约 / 控制权 / 账本去重 / MCP HTTP+stdio / 故障注入（模拟 Mod） | **已通过** 46/46 |
 | Mod 编译（`dotnet build`，引用真实游戏 DLL） | **已通过** 0 警告 0 错误 |
 | Bridge + Web 实进程自检（`/health`、`/`、`/mcp`、`scripts/smoke.mjs`） | **已通过**（无游戏时的降级行为也已验证） |
-| **真实游戏内实机验收**（加载存档后的读写、断线自释放、跨日/换存档） | **待实机执行**：本次交付未动正在运行的游戏，步骤见 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md) §5 |
+| **真实游戏内实机验收** | **部分通过**：正常加载、移动、选槽、箱子存取与去重、制作、放置、等待、失联收手与 Web 接管。完整矩阵见 [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md) |
 
 ## 8. 许可证与来源
 

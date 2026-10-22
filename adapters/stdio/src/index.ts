@@ -13,6 +13,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { createToolServer, type ToolExecutor, type ToolResult } from '@sab/mcp';
+import { getTool } from '@sab/contracts';
 
 interface EndpointFile {
     port?: number;
@@ -86,10 +87,19 @@ const executor: ToolExecutor = {
                     authorization: `Bearer ${resolved.token}`
                 },
                 body: JSON.stringify(args ?? {}),
-                signal: AbortSignal.timeout(readTimeout(toolName))
+                signal: AbortSignal.any([AbortSignal.timeout(readTimeout(toolName)), ...(ctx.signal ? [ctx.signal] : [])]),
+                redirect: 'error'
             });
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
+            const tool = getTool(toolName);
+            const operation = (args as { operation?: string } | null)?.operation;
+            const mayWrite = tool?.kind !== 'read' && !(tool?.kind === 'mixed' && operation === 'list');
+            if (mayWrite) return {
+                isError: true,
+                text: `错误 RESULT_UNKNOWN: Bridge 请求未获得最终响应：${message}。请查询原 actionId 并重新观察，不能自动重放消费动作。`,
+                structured: { kind: 'error', fault: { code: 'RESULT_UNKNOWN', effectKnown: false, nextAction: 'query_action' } }
+            };
             return {
                 isError: true,
                 text:

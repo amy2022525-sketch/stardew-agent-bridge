@@ -2,18 +2,20 @@
 .SYNOPSIS
     回滚 Mod：移除本次安装的 StardewAgentBridge，并按需恢复最近的备份。
 .DESCRIPTION
-    - 默认只移除当前安装目录（游戏需先退出）。
-    - -RestoreLatest 会把最近的 StardewAgentBridge.bak-* 恢复为 StardewAgentBridge。
+    - 默认把当前安装移到备份目录，并恢复最近一次安装前的桥接目录。
+    - -RemoveOnly 只停用当前安装；-RestoreLatest 保留为兼容参数。
     - 绝不触碰存档、游戏本体或其他 Mod。
 #>
 [CmdletBinding()]
 param(
     [string]$GamePath,
     [switch]$RestoreLatest,
+    [switch]$RemoveOnly,
     [switch]$Force
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'mod-install-common.ps1')
 
 function Resolve-GamePath {
     param([string]$Explicit)
@@ -34,30 +36,39 @@ function Resolve-GamePath {
 }
 
 $resolved = Resolve-GamePath -Explicit $GamePath
-$mods = Join-Path $resolved 'Mods'
-$target = Join-Path $mods 'StardewAgentBridge'
+$mods = Assert-SabChild -Path (Join-Path $resolved 'Mods') -Root $resolved
+$target = Assert-SabChild -Path (Join-Path $mods 'StardewAgentBridge') -Root $mods
 
 $running = Get-Process -Name 'StardewModdingAPI', 'Stardew Valley' -ErrorAction SilentlyContinue
-if ($running -and -not $Force) {
+if ($running) {
     throw "游戏正在运行（$($running.Name -join ', ')）。请先正常退出游戏再回滚。"
 }
 
-if (Test-Path $target) {
-    Remove-Item $target -Recurse -Force
-    Write-Host "[rollback-mod] 已移除：$target"
-} else {
-    Write-Host "[rollback-mod] 当前没有安装 StardewAgentBridge。"
+$backupRoot = Get-SabBackupRoot -GameRoot $resolved
+$statePath = Join-Path $backupRoot 'latest.json'
+if (-not (Test-Path -LiteralPath $statePath)) { throw '没有本项目安装记录，拒绝猜测或删除现有目录。' }
+$state = Get-Content -LiteralPath $statePath -Raw -Encoding UTF8 | ConvertFrom-Json
+if ([IO.Path]::GetFullPath($state.GamePath) -ne [IO.Path]::GetFullPath($resolved)) { throw '备份不属于指定游戏目录。' }
+if ($state.Status -eq 'rolled_back') { Write-Host '[rollback-mod] 此次安装已经回退。'; return }
+$snapshot = Assert-SabChild -Path $state.Snapshot -Root $backupRoot
+foreach ($entry in $state.Previous) {
+    if ($entry.Name -in @('.', '..') -or [IO.Path]::GetFileName($entry.Name) -ne $entry.Name) { throw '备份记录中的目录名不合法。' }
+    $source = Assert-SabChild -Path (Join-Path $snapshot $entry.Name) -Root $snapshot
+    $destination = Assert-SabChild -Path (Join-Path $mods $entry.Name) -Root $mods
+    if ((Test-Path -LiteralPath $source) -and (Test-Path -LiteralPath $destination) -and $destination -ne $target) { throw "恢复目标已存在，拒绝覆盖：$destination" }
 }
-
-if ($RestoreLatest) {
-    $backups = Get-ChildItem $mods -Directory -Filter 'StardewAgentBridge.bak-*' | Sort-Object Name -Descending
-    if ($backups.Count -eq 0) {
-        Write-Host '[rollback-mod] 没有可恢复的备份。'
-    } else {
-        $latest = $backups[0]
-        Move-Item $latest.FullName $target
-        Write-Host "[rollback-mod] 已恢复备份：$($latest.Name) → StardewAgentBridge"
-    }
+if (Test-Path -LiteralPath $target) {
+    $manifest = Get-Content -LiteralPath (Join-Path $target 'manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($manifest.UniqueID -ne 'StardewAgentBridge.Bridge') { throw '当前目录不是本项目 Mod，拒绝移动。' }
+    $currentBackup = Assert-SabChild -Path (Join-Path $snapshot ('rollback-current-' + [DateTime]::UtcNow.ToString('HHmmssfff'))) -Root $snapshot
+    Move-Item -LiteralPath $target -Destination $currentBackup
 }
+if (-not $RemoveOnly) { foreach ($entry in $state.Previous) {
+    $source = Assert-SabChild -Path (Join-Path $snapshot $entry.Name) -Root $snapshot
+    $destination = Assert-SabChild -Path (Join-Path $mods $entry.Name) -Root $mods
+    if (Test-Path -LiteralPath $source) { Move-Item -LiteralPath $source -Destination $destination; Write-Host "[rollback-mod] 已恢复：$($entry.Name)" }
+} }
+$state.Status = 'rolled_back'
+Write-SabInstallState -State $state -BackupRoot $backupRoot
 
 Write-Host '[rollback-mod] 完成。游戏存档与游戏本体未被修改。'

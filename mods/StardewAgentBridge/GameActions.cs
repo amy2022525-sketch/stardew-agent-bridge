@@ -18,10 +18,16 @@ public static class GameActions
         public object Tick() => result();
         public void Cancel() { }
     }
-    public static IGameAction Create(Request request, Observations observations, IReflectionHelper reflection)
-        => request.Command is "menu" or "buy" or "wait" or "pause" or "closemenu" or "fish"
+    public static IGameAction Create(Request request, Observations observations, IReflectionHelper reflection, ControlAuthority control)
+    {
+        if (request.Command == "pause") return new Immediate(() => {
+            if (!control.TryOpenPauseMenu()) throw new ActionFault("PAUSE_BLOCKED", "当前无法打开正常暂停菜单。");
+            return observations.Result("已通过正常游戏菜单尝试暂停。");
+        });
+        return request.Command is "menu" or "buy" or "wait" or "pause" or "closemenu" or "fish"
             ? CreateNow(request, observations, reflection)
             : new ReadyAction(() => CreateNow(request, observations, reflection));
+    }
     private static IGameAction CreateNow(Request request, Observations observations, IReflectionHelper reflection)
     {
         if (request.Command == "menu") return new MenuAction(observations, observations.Resolve(Protocol.Text(request.Args, "target"), true));

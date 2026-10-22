@@ -4,6 +4,7 @@
  */
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { randomInt } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { Bridge } from '@sab/server';
@@ -13,15 +14,24 @@ import { MockMod } from './mock-mod.js';
 
 /** 取一个空闲端口：先占用再释放，交给模拟 Mod 监听。 */
 async function freePort(): Promise<number> {
-    return new Promise<number>((resolve, reject) => {
-        const server = createServer();
-        server.once('error', reject);
-        server.listen(0, '127.0.0.1', () => {
-            const address = server.address();
-            const port = typeof address === 'object' && address ? address.port : 0;
-            server.close(() => resolve(port));
-        });
-    });
+    // Some Windows hosts allocate only low ephemeral ports. Explicitly request a
+    // fetch-safe port instead of repeatedly asking for port 0 without a bound.
+    for (let attempt = 0; attempt < 32; attempt += 1) {
+        try {
+            return await new Promise<number>((resolve, reject) => {
+                const server = createServer();
+                server.once('error', reject);
+                server.listen(randomInt(20000, 60000), '127.0.0.1', () => {
+                    const address = server.address();
+                    const port = typeof address === 'object' && address ? address.port : 0;
+                    server.close(error => error ? reject(error) : resolve(port));
+                });
+            });
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw error;
+        }
+    }
+    throw new Error('Unable to reserve a test port after 32 attempts.');
 }
 
 export interface Stack {
@@ -56,7 +66,7 @@ export async function startStack(options: {
         dataDir,
         logger,
         configOverride: {
-            bridgePort: 0,
+            bridgePort: await freePort(),
             modPort: reservedPort,
             leaseTtlMs: options.leaseTtlMs ?? 180_000,
             logLevel: 'error'

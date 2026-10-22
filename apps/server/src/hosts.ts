@@ -50,6 +50,7 @@ function tomlString(value: string): string {
 
 export function generateHostConfig(input: HostConfigInput): HostConfigSnippet {
     const notes: string[] = [
+        '此为配置模板；该宿主版本的实际短任务仍需按 docs/CLIENTS.md 验收。',
         '令牌等价于密码：只写入本机宿主配置，不要提交到仓库或粘贴到公开聊天。',
         '启动顺序无关：Bridge 未运行时宿主会报告连接失败，启动后重连即可。'
     ];
@@ -177,7 +178,7 @@ export function generateHostConfig(input: HostConfigInput): HostConfigSnippet {
 }
 
 export const HOST_SUPPORT_MATRIX: { host: string; http: string; stdio: string; note: string }[] = [
-    { host: 'DSH', http: '支持（推荐）', stdio: '支持', note: '通过 MCP 连接器导入，无需专用插件' },
-    { host: 'Codex CLI', http: '取决于版本', stdio: '支持（推荐）', note: '旧版本仅支持 stdio，可用适配器' },
-    { host: 'Claude Code', http: '支持（推荐）', stdio: '支持', note: '.mcp.json 项目级配置或 claude mcp add' }
+    { host: 'DSH', http: '配置模板', stdio: '配置模板', note: '真实宿主待验收；导入入口按安装版本核对' },
+    { host: 'Codex CLI', http: '配置模板', stdio: '配置模板', note: '真实宿主待验收；支持取决于安装版本' },
+    { host: 'Claude Code', http: '配置模板', stdio: '配置模板', note: '真实宿主待验收；.mcp.json 或 claude mcp add' }
 ];

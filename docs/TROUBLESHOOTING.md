@@ -37,7 +37,7 @@ node apps/server/dist/cli.js matrix        # 宿主支持矩阵
 | `GAME_UNAVAILABLE` | Mod 未连接 | 见 §2 |
 | `NO_SAVE_LOADED` | 没有加载存档（标题页） | 加载单人存档 |
 | `MULTIPLAYER_UNSUPPORTED` | 当前在多人模式 | 只用单人存档 |
-| `CONTROL_REQUIRED` | 没有控制会话 | `stardew_session {operation:"start"}` 或网页「获取控制权」 |
+| `CONTROL_REQUIRED` | 该 Agent 身份没有控制会话 | 由该 Agent 调用 `stardew_session {operation:"start"}`；网页的控制身份与 Agent 不同 |
 | `CONTROL_BUSY` | 别人持有控制权 | 等对方释放，或在网页点「接管」 |
 | `CONTROL_EXPIRED` | 发生过接管/断线/换存档，epoch 变了 | 重新 `start`，并重新 `snapshot` 再决定动作 |
 | `ACTION_BUSY` / `BUSY` | 有动作在途，或剧情/菜单/过渡挡住了 | `stardew_wait` 或 `stardew_snapshot` 看 `control.blockedBy` |
@@ -53,9 +53,9 @@ node apps/server/dist/cli.js matrix        # 宿主支持矩阵
 
 这类结果表明**效果可能已经发生**（`effectKnown=false`）。正确流程：
 
-1. `stardew_status`：看是否有未决动作与在途动作。
+1. `stardew_status {actionId:"<原 ID>"}`：查询原动作，不要先换 ID。
 2. `stardew_snapshot`（必要时 `inspect`）：用真实世界状态判断上一步到底成没成。
-3. 已生效 → 继续下一步；未生效 → **用新的 `actionId`** 重做（不要复用旧 ID，账本会拒绝）。
+3. 先确认原动作已停、没有待执行请求。只有查到确定结果、核对前后资源后才能决定下一步；无法确定时保持停止并人工判断，不自动换 ID 重做。
 4. 不要"再试一次相同调用"来赌，尤其是购买、出售、投箱、制作这类消费动作。
 
 Bridge 不会替你重放：账本里没有终态的 `actionId` 只会返回 `RESULT_UNKNOWN`。
@@ -96,11 +96,11 @@ powershell -ExecutionPolicy Bypass -File scripts/rollback-mod.ps1
 powershell -ExecutionPolicy Bypass -File scripts/rollback-mod.ps1 -RestoreLatest   # 恢复上一版备份
 ```
 
-回滚只动 `Mods\StardewAgentBridge`（及其 `.bak-*`），不碰存档与游戏本体。
+回滚只移动本项目 Mod，并按安装事务恢复旧桥接。备份保存在游戏目录的 `.stardew-agent-bridge-backups/`，位于 Mods 外；不会触碰存档与游戏本体。`-RemoveOnly` 仅停用当前版本，默认回滚才恢复最近事务。
 安装前请自行备份游戏存档目录：`%APPDATA%\StardewValley\Saves`。
 
 ## 9. 提交问题前的三件事
 
 1. `node apps/server/dist/cli.js doctor` 的完整输出。
 2. `logs/bridge.log` 里出错时间点前后 50 行（已脱敏）。
-3. 问题包：网页「导出诊断」→ `exports/` 下的 zip（不含令牌）。
+3. 问题包：网页「导出诊断」→ `exports/` 下的 JSON（递归脱敏，不含令牌）。

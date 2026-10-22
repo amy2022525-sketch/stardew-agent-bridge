@@ -79,6 +79,7 @@ export function defaultPauseReport(): PauseReport {
 export function buildSummary(input: {
     command: string;
     status: ActionStatus;
+    verified?: boolean;
     effects?: Record<string, unknown> | null;
     pause?: PauseReport;
     error?: BridgeFault | null;
@@ -87,7 +88,7 @@ export function buildSummary(input: {
     const statusText: Record<ActionStatus, string> = {
         accepted: '已受理',
         running: '执行中',
-        succeeded: '已完成并核验',
+        succeeded: input.verified ? '已完成并核验' : '已完成（待核验）',
         partial: '部分完成',
         failed: '失败',
         cancelled: '已停止',
@@ -138,6 +139,7 @@ export function buildReceipt(input: BuildReceiptInput): ActionReceipt {
         summary: buildSummary({
             command: input.command,
             status: input.status,
+            verified: input.verified,
             effects: input.effects ?? null,
             pause,
             error

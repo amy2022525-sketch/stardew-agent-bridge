@@ -55,6 +55,7 @@ export class MockMod {
     location: string;
     saveLoaded: boolean;
     instanceId = 'mock-instance-1';
+    worldGeneration = 3;
     snapshotSeq = 0;
     accessDenied = 0;
 
@@ -254,6 +255,7 @@ export class MockMod {
             kind: 'hello',
             protocol: MOD_PROTOCOL,
             instanceId: this.instanceId,
+            worldGeneration: this.worldGeneration,
             modVersion: '0.1.0',
             gameVersion: '1.6.15',
             smapiVersion: '4.5.2',
@@ -342,7 +344,7 @@ export class MockMod {
         return {
             snapshotId: `s${this.snapshotSeq}`,
             instanceId: this.instanceId,
-            saveGeneration: 3,
+            saveGeneration: this.worldGeneration,
             location: this.location,
             date: { season: 'spring', day: 5, year: 1 },
             time: 620,

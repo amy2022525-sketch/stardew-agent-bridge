@@ -1,5 +1,7 @@
 # 交付报告：Stardew Agent Bridge 0.1.0
 
+> 历史交付记录：下文保留首次实现时的 34 项测试和实机待执行状态。后续已修复控制、取消、故障与安装问题，并完成部分实机和 Web 测试；当前结论、未完成项及源码预览范围以 [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md) 为准。本文中的“唯一未完成”“已闭环”等旧结论不代表当前验收范围。
+
 日期：2026-10-22（Asia/Shanghai）
 来源：`C:\Users\am202\Desktop\星露谷AI项目_开发交接书.md`（v1.0 / 规划文件 1.1）
 仓库：`F:\星露谷\stardew-agent-bridge`（**本地仓库，未创建远端、未 push、未发布 Release**）

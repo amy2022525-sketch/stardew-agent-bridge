@@ -9,7 +9,7 @@
  * 终态缓存可以淘汰，墓碑不会。
  */
 import { DatabaseSync } from 'node:sqlite';
-import { BridgeError, type ActionReceipt, type ActionStatus, type Checkpoint, type SessionMode, type SessionState } from '@sab/contracts';
+import { BridgeError, buildReceipt, makeFault, type ActionReceipt, type ActionStatus, type Checkpoint, type SessionMode, type SessionState } from '@sab/contracts';
 
 export const LEDGER_SCHEMA_VERSION = 1;
 
@@ -265,19 +265,26 @@ export class ActionLedger {
 
     findById(actionId: string): ActionReceipt | null {
         if (!this.db) return null;
-        const row = this.db.prepare('SELECT receipt FROM actions WHERE action_id = ? ORDER BY intent_at DESC LIMIT 1').get(actionId) as SqlRow | undefined;
-        const raw = row ? asString(row.receipt) : null;
-        if (!raw) return null;
-        try {
-            return JSON.parse(raw) as ActionReceipt;
-        } catch {
-            return null;
-        }
+        const row = this.db.prepare('SELECT * FROM actions WHERE action_id = ? ORDER BY intent_at DESC LIMIT 1').get(actionId) as SqlRow | undefined;
+        return row ? this.receiptOrUnresolved(row) : null;
     }
 
     /** 结果不明（unknown）的动作，供 status 提示调用者先核对。 */
     unresolved(limit = 20): ActionReceipt[] {
-        return this.recent(200).filter((receipt) => receipt.status === 'unknown' || receipt.status === 'accepted' || receipt.status === 'running').slice(0, limit);
+        if (!this.db) return [];
+        const rows = this.db.prepare("SELECT * FROM actions WHERE receipt IS NULL OR status IN ('unknown','accepted','running') ORDER BY intent_at DESC LIMIT ?").all(limit) as SqlRow[];
+        return rows.map(row => this.receiptOrUnresolved(row));
+    }
+
+    private receiptOrUnresolved(row: SqlRow): ActionReceipt {
+        const action = this.mapRow(row);
+        return action.receipt ?? buildReceipt({
+            actionId: action.actionId, clientId: action.clientId, controlSessionId: action.controlSessionId,
+            gameInstanceId: action.gameInstanceId, worldGeneration: action.worldGeneration < 0 ? null : action.worldGeneration,
+            sceneGeneration: null, command: action.command, status: 'unknown', verified: false, effectKnown: false,
+            startedAt: action.intentAt, finishedAt: null, nextAction: 'query_action',
+            error: makeFault('RESULT_UNKNOWN', '已记录派发意图，尚无最终收据；不能据此判定未生效，也不能重放。', { effectKnown: false })
+        });
     }
 
     saveSession(session: SessionRow): void {

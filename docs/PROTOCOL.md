@@ -70,7 +70,7 @@
 { "code": "OUT_OF_REACH", "message": "目标不在可交互范围内。", "effectKnown": true, "nextAction": "observe" }
 ```
 
-`result.pause` 由 Mod 统一附加（真实读取 `Game1.activeClickableMenu`）：`state` = `running`（无菜单）| `paused`（有菜单，`selfOpened` 表示是不是 Mod 自己开的正常暂停菜单）| `blocked`（剧情/过渡中，不能暂停）。
+`result.pause` 由 Mod 统一附加：按 `Game1.shouldTimePass()` 判断 `running` / `paused`，无菜单且剧情或过渡中可标 `blocked`。`selfOpened` 只对 Mod 自己创建且仍是当前对象的正常暂停菜单为真；有菜单不一定时间停止。
 
 ### 2.2 命令表
 
@@ -94,16 +94,16 @@
 | `wait` | 写 | `milliseconds` 100–10000 | 有界等待，不跳剧情 |
 | `buy` | 写 | `itemId`、`count` 1–999 | 正常购买 |
 | `ship` | 写 | `target`、`slot`、`count` | 投放出货箱 |
-| `container` | 写 | `target`、`operation`、`slot`、`count` | `list`/`deposit`/`withdraw` |
+| `container` | 读/写 | `target`、`operation`、`slot`、`count` | `list` 只读且不需 actionId；`deposit`/`withdraw` 为写 |
 | `craft` | 写 | `recipe`、`count` | 正常制作 |
 | `place` | 写 | `target`、`slot` | 放置物品 |
 | `eat` | 写 | `slot` | 食用 |
 | `equip` | 写 | `slot`、`kind`、`operation` | 穿脱装备 |
 | `fish` | 写 | `target?`、`milliseconds` ≤55000 | 有界钓鱼（逐帧输入由 Mod 控制） |
 | `combat` | 写 | `target`、`milliseconds` ≤10000、`minHealth` | 有界战斗，达到生命阈值即停 |
-| `load` | 写 | `saveId` | 加载存档（来自 `saves`） |
+| `load` | 写 | `saveId` | 仅在标题加载来自 `saves` 的存档；Bridge 回执 accepted 后另查就绪 |
 | `stop` | 控制 | `actionId?` | **只**停止该 actionId（缺省=当前在途动作） |
-| `control` | 控制 | `operation`、`holder?`、`leaseExpiresAt?`、`epoch?`、`pause?` | 控制权 |
+| `control` | 控制 | `operation`、`holder?`、`leaseExpiresAt?`、`epoch?`、`pause?`、`mode?` | 控制权；mode 为 step/realtime |
 
 **不存在的命令**（代码中没有，不是禁用）：`warp`（传送）、`resource`/`give`（改资源）、`skipevent`（跳剧情）、`diag`。
 
@@ -113,9 +113,9 @@
 
 | 操作 | 语义 | 结果 |
 | --- | --- | --- |
-| `acquire {holder, leaseExpiresAt}` | 建立/替换持有者 | `epoch + 1` |
-| `renew {epoch, leaseExpiresAt}` | 续租；epoch 不匹配即 `CONTROL_EXPIRED` | epoch 不变 |
-| `release {epoch, pause}` | 释放；可选尝试正常暂停 | epoch 不变，持有者清空 |
+| `acquire {holder, leaseExpiresAt, mode?}` | 有有效租约则拒绝；空闲时建立持有者 | `epoch + 1` |
+| `renew {epoch, leaseExpiresAt}` | 仅对有效持有者和有效租约续租；不能复活过期/释放控制权 | epoch 不变 |
+| `release {epoch, pause}` | 撤销持有者；可选尝试正常暂停 | `epoch + 1`，持有者清空 |
 | `takeover` | 人工接管：停动作、撤销持有者、尝试暂停 | `epoch + 1` |
 
 写请求必须携带当前 `epoch`，否则：
@@ -130,7 +130,7 @@
 Mod 每帧检查最近一次收到合法帧的时间：
 
 - 超过 `LinkTimeoutSeconds`（默认 5 秒）且当前有在途动作或持有控制权 → 停止动作、`player.Halt()`、撤销控制权（`epoch + 1`）、**尝试**打开正常暂停菜单。同一秒内最多触发一次。
-- 动作在途时若发起连接断开 → 立即 `cancelled`，并释放输入（含合成的鼠标左键，避免留下一次点击）。
+- 动作在途时若发起连接断开 → 停止并释放输入（含合成的鼠标左键）。因效果可能已发生，回执保留 `unknown` / `effectKnown=false`，不假设未执行。
 - `F9`（可配置）紧急停止：停动作、释放输入、撤销控制权、尝试暂停，不依赖 Bridge 是否活着。
 
 ### 2.5 Mod 侧幂等
@@ -145,6 +145,7 @@ Mod 在自己的内存里记录已见 `actionId` 与参数指纹：
 ## 3. MCP 工具面
 
 - 传输：`POST /mcp`（Streamable HTTP）。工具用 JSON Schema 注册（`fromJsonSchema`）。
+- Bearer 身份绑定调用与会话。旧 `2025-11-25` 协议使用有状态 HTTP 传输，现代 `2026-07-28` 使用 SDK 新传输；取消信号沿 MCP → control-core 定向停止该调用已经派发的动作。HTTP 请求断开和 stdio 取消也转发停止；不能保证宿主断开前未发生消费。
 - 返回：文本摘要（给人/无视觉能力模型读）+ `structuredContent`（机器读）+ 截图工具额外返回 `image`。失败时 `isError=true`，文本首行固定为 `错误 <CODE>: <message>（effectKnown=… 下一步=…）`，并同时给出 `structuredContent.error`。
 - 28 个工具与分类见 [README](../README.md) §3。
 
@@ -153,10 +154,12 @@ Mod 在自己的内存里记录已见 `actionId` 与参数指纹：
 | 参数 | 必需 | 说明 |
 | --- | --- | --- |
 | `actionId` | 否 | 幂等键；缺省由 Bridge 生成。重试**必须复用**同一 ID |
-| `controlSessionId` | 否 | 指定控制会话；只有一个活跃会话时自动推断，多个时 `CONTROL_REQUIRED` |
+| `controlSessionId` | 否 | 使用该 clientId 唯一活动会话，零个/多个时 `CONTROL_REQUIRED`；同 clientId 多聊天可能共享会话 |
 
-`stardew_session` 的参数：`{operation: 'start'|'renew'|'release'|'status', holderName?, ttlMs?}`。
+`stardew_session` 的参数：`{operation: 'start'|'status'|'checkpoint'|'end', mode?: 'step'|'realtime', controlSessionId?, goal?, progress?, next?, constraints?}`。checkpoint 保存续接摘要，end 释放并尝试暂停；写入自动续租，只读不续租。宿主级 renew/release 不是该工具的 operation。
 `stardew_stop` 只停止调用方自己的动作；人工急停只能通过网页或 `F9`（避免 Agent 停别人的动作）。
+
+`stardew_status {actionId?}` 返回原动作回执、最近动作与未决项；只有意图、没有终态的崩溃窗口返回 unknown。succeeded 与 verified 分开：只有 verified=true 才称核验通过。load 的 accepted/verified=false 保持原记录，实际就绪另查 doctor/snapshot，目前不会自动改写为完成。
 
 ## 4. HTTP API
 
@@ -174,7 +177,7 @@ Mod 在自己的内存里记录已见 `actionId` 与参数指纹：
 | `GET /api/v1/screenshot` | 网页会话 | 最近一次截图（PNG） |
 | `GET /api/v1/hosts?host=<dsh\|codex\|claude-code>&transport=<http\|stdio>` | 网页会话 | 生成宿主配置片段（会签发/复用客户端令牌） |
 | `GET /api/v1/diagnostics` | 网页会话 | 脱敏诊断（版本、端口、Mod 状态、账本统计） |
-| `POST /api/v1/diagnostics/export` | 网页会话 | 导出问题包到 `exports/`（不含令牌） |
+| `POST /api/v1/diagnostics/export` | 网页会话 | 导出脱敏 JSON 问题包到 `exports/` |
 | `POST /api/v1/control/{start\|takeover\|end}` | 网页会话 | 人工获取/接管/释放控制权 |
 | `POST /api/v1/stop` | 网页会话 | 人工停止（可带 `actionId`） |
 | `POST /api/v1/tool/<name>` | Bearer 或网页会话 | 工具调用（stdio 适配器走这里） |
@@ -219,9 +222,11 @@ Mod 在自己的内存里记录已见 `actionId` 与参数指纹：
 | 执行 | `ACTION_BUSY`、`BUSY`、`PATH_BLOCKED`、`OUT_OF_REACH`、`INSUFFICIENT_RESOURCE`（含 `NOT_ENOUGH_MONEY`/`NOT_ENOUGH_ITEMS`/`INVENTORY_FULL` 别名）、`RATE_LIMITED`、`INVALID_ARGUMENT` | true | `wait` / `observe` |
 | 不确定 | `RESULT_UNKNOWN`、`TIMEOUT`、`INTERNAL_ERROR` | **false** | `query_action` |
 | 幂等/限额 | `IDEMPOTENCY_CONFLICT`、`OUTPUT_LIMIT`、`JOURNAL_UNAVAILABLE` | true | `observe` / 人工处理 |
-| 取消 | `CANCELLED` | true | `observe` |
+| 停止/取消 | `CANCELLED` | 取决于派发阶段；运行中停止为 false | `observe` / `query_action` |
 
 规则：`effectKnown=false` 表示**效果可能已发生**，禁止换新 ID 重放；只能查询/观察。
+
+上表中 true 适用于派发前已知拒绝。动作 Tick 期间异常、核验失败、加载异常及停止可能已有副作用，会覆盖为 false 并保留 unknown；不能仅凭原始错误码推定没有消费。
 
 ## 8. 限额
 

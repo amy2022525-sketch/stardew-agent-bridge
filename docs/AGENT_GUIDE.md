@@ -12,20 +12,20 @@ stardew_snapshot          # 看世界：位置、背包、作物、出口、菜�
 stardew_move / use / interact / menu / buy …（带自己的 actionId）
    ↓
 stardew_snapshot（或 inspect）核对真实结果 → 再下一步
-stardew_session           # {operation:"release"} 结束时释放（可选；租约也会自然过期）
+stardew_session           # {operation:"end"} 结束时显式释放控制权
 ```
 
 要点：
 
-- **先观察再行动**：`targetRef`（`@s12:e7`）只对产生它的那次快照有效，世界一变就作废。
-- **动作后必核对**：结果里的 `effects` 是真实差分（位置、背包、金钱、体力），`snapshot` 是最终裁判。
-- **每次写用新 `actionId`**：例如 `act-<日期>-<序号>`。只有"重试同一个失败调用"才复用同一个 ID。
+- **先观察再行动**：`targetRef`（`@s12:e7`）有保存数量与世界/场景代次限制；优先使用最新观察的引用，失效后重新观察。
+- **动作后必核对**：`status`、`verified` 与 `effects` 必须一起看；`accepted` 仅受理、`partial` 可能未达目标，最终还要用快照核对。
+- **每个新动作使用新 `actionId`**：例如 `act-<日期>-<序号>`。查询或重复提交原请求时保留原 ID 和原参数；结果不明时不得换新 ID 自动重做。
 
 ## 2. 遇到这些就停下来观察
 
 | 回执 | 该做什么 |
 | --- | --- |
-| `effectKnown=false`（`RESULT_UNKNOWN`/`TIMEOUT`/`INTERNAL_ERROR`） | `stardew_status` → `stardew_snapshot`；确认已生效就继续，未生效用**新** ID 重做 |
+| `effectKnown=false`（`RESULT_UNKNOWN`/`TIMEOUT`/`INTERNAL_ERROR`） | `stardew_status {actionId:"原ID"}` → `stardew_snapshot`；先停止并核对。缺少变化不能证明从未生效；禁止自动换新 ID 重试消费动作 |
 | `CONTROL_EXPIRED` / `CONTROL_REQUIRED` | 重新 `stardew_session start`，再 `snapshot` 重建引用 |
 | `BUSY` / `ACTION_BUSY` / `PAUSE_BLOCKED` | `stardew_wait` 或看 `snapshot.control.blockedBy`；剧情/结算/信件请用 `menu` 处理，别硬来 |
 | `STALE_REF` / `MENU_MISMATCH` | 世界变了：重新 `snapshot`，别复用旧引用 |
@@ -38,7 +38,7 @@ stardew_session           # {operation:"release"} 结束时释放（可选；租
 
 - `snapshot.menu` 出现时，只能用 `stardew_menu {target}` 选它给出的**真实选项**；`closemenu` 只对可关闭菜单有效。
 - 剧情、信件、结算期间 `control.pause.state = blocked`：先处理它们（`menu`），再恢复动作。
-- 每步之后 Mod 会**尝试**正常暂停；`pause.selfOpened=true` 说明是它自己开的，可以直接 `closemenu` 继续；`selfOpened=false` 是玩家开的菜单，别关。
+- step 模式每步之后 Mod 会**尝试**正常暂停；`pause.selfOpened=true` 说明是它自己开的，后续动作会自动关闭它并继续；`selfOpened=false` 是玩家开的菜单，别关。
 
 ## 4. 效率建议
 
@@ -57,7 +57,7 @@ stardew_session           # {operation:"release"} 结束时释放（可选；租
 
 ## 6. 结束与交还
 
-- 干完活：`stardew_session {operation:"release"}`；游戏会保持/恢复到正常暂停，玩家随手就能继续。
+- 干完活：`stardew_session {operation:"end"}`；Mod 会尝试正常暂停；检查返回的 pause，blocked/unknown 不等于已暂停。
 - 玩家想接管：任何时刻按 `F9`，或在网页点「接管」——你的 `epoch` 立刻失效，后续写请求会被拒（这是设计，不是你出 bug）。
 - 出问题别硬撑：调用 `stardew_stop` 停自己的动作，然后汇报现象与回执。
 

@@ -33,6 +33,7 @@ body {
 
 .topbar {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
@@ -44,9 +45,9 @@ body {
     z-index: 10;
 }
 
-.brand { display: flex; align-items: center; gap: 8px; }
+.brand { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 .version { color: var(--muted); font-size: 12px; }
-.topbar-actions { display: flex; align-items: center; gap: 8px; }
+.topbar-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; }
 
 .dot {
     width: 10px; height: 10px; border-radius: 50%;
@@ -71,6 +72,7 @@ main {
 }
 
 .card {
+    min-width: 0;
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 10px;
@@ -143,3 +145,10 @@ label { color: var(--muted); display: inline-flex; gap: 6px; align-items: center
 .hidden { display: none; }
 
 footer { text-align: center; color: var(--muted); font-size: 12px; padding: 18px; }
+
+@media (max-width: 600px) {
+    main { padding: 10px; }
+    .topbar { padding: 10px; }
+    .grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 4px 10px; }
+    .timeline li { grid-template-columns: 64px minmax(0, 100px) minmax(0, 1fr); overflow-wrap: anywhere; }
+}

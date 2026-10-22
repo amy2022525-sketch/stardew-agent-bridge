@@ -18,7 +18,10 @@ $repo = Split-Path -Parent $PSScriptRoot
 Set-Location $repo
 
 $version = (node -p "require('./package.json').version" | Select-Object -Last 1).Trim()
+if ($version -notmatch '^\d+\.\d+\.\d+([+-][A-Za-z0-9.-]+)?$') { throw '无效的发布版本号。' }
 $out = Join-Path $repo "release\StardewAgentBridge-$version"
+. (Join-Path $PSScriptRoot 'mod-install-common.ps1')
+$out = Assert-SabChild -Path $out -Root (Join-Path $repo 'release')
 Write-Host "[pack] 目标目录：$out"
 
 if (-not $SkipTests) {
@@ -36,9 +39,9 @@ Write-Host '[pack] 打包 server 与 stdio 适配器（单文件，无 node_modu
 $banner = "import { createRequire as __sabCreateRequire } from 'node:module'; const require = __sabCreateRequire(import.meta.url);"
 $serverOut = Join-Path $out 'server\bridge.mjs'
 $adapterOut = Join-Path $out 'server\stdio-adapter.mjs'
-& npx esbuild apps/server/src/cli.ts --bundle --platform=node --format=esm --target=node22 "--outfile=$serverOut" "--banner:js=$banner" --log-level=warning | Out-Host
+& node node_modules/esbuild/bin/esbuild apps/server/src/cli.ts --bundle --platform=node --format=esm --target=node22 "--outfile=$serverOut" "--banner:js=$banner" --log-level=warning | Out-Host
 if ($LASTEXITCODE -ne 0) { throw 'server 打包失败。' }
-& npx esbuild adapters/stdio/src/index.ts --bundle --platform=node --format=esm --target=node22 "--outfile=$adapterOut" "--banner:js=$banner" --log-level=warning | Out-Host
+& node node_modules/esbuild/bin/esbuild adapters/stdio/src/index.ts --bundle --platform=node --format=esm --target=node22 "--outfile=$adapterOut" "--banner:js=$banner" --log-level=warning | Out-Host
 if ($LASTEXITCODE -ne 0) { throw 'stdio 适配器打包失败。' }
 
 Write-Host '[pack] 复制 Web 产物…'
@@ -55,7 +58,7 @@ if (-not $SkipMod) {
     Copy-Item (Join-Path $repo 'artifacts\mod\StardewAgentBridge\*') (Join-Path $out 'mod') -Recurse -Force
 }
 
-foreach ($doc in @('README.md', 'README.en.md', 'LICENSE', 'NOTICE.md', 'CHANGELOG.md')) {
+foreach ($doc in @('README.md', 'README.en.md', 'LICENSE', 'NOTICE.md', 'CHANGELOG.md', 'FINAL_TEST_REPORT.md')) {
     $source = Join-Path $repo $doc
     if (Test-Path $source) { Copy-Item $source $out }
 }
@@ -72,12 +75,13 @@ foreach ($doc in @('ACCEPTANCE.md', 'AGENT_GUIDE.md', 'CLIENTS.md', 'PROTOCOL.md
 诊断：
   node server\bridge.mjs doctor
 安装/回滚 Mod：
-  powershell -ExecutionPolicy Bypass -File scripts\install-mod.ps1
-  powershell -ExecutionPolicy Bypass -File scripts\rollback-mod.ps1
+  powershell -ExecutionPolicy Bypass -File .\install-mod.ps1 -GamePath "<游戏目录>"
+  powershell -ExecutionPolicy Bypass -File .\rollback-mod.ps1 -GamePath "<游戏目录>"
 '@ | Set-Content (Join-Path $out '启动说明.txt') -Encoding UTF8
 
 Copy-Item (Join-Path $PSScriptRoot 'install-mod.ps1') $out -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $PSScriptRoot 'rollback-mod.ps1') $out -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $PSScriptRoot 'mod-install-common.ps1') $out
 
 Write-Host '[pack] 审计：检查是否混入游戏资源、存档或凭据…'
 $forbidden = Get-ChildItem $out -Recurse -File | Where-Object {

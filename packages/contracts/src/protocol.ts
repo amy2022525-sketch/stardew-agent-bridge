@@ -124,6 +124,7 @@ export interface ModHello {
     gameVersion: string;
     smapiVersion: string;
     saveLoaded: boolean;
+    worldGeneration: number;
     singlePlayer: boolean;
     capabilities: string[];
     writeCommands: string[];

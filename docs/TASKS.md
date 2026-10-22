@@ -226,7 +226,7 @@
 首版之后另建任务：跨季节稳定性、更多任务/社交/动物分支、特殊箱子、macOS/Linux、多实例、联机和远程访问。新增范围必须附验收条件，再排入版本，不能静默扩大 0.1.0 完成定义。
 ---
 
-## 执行状态（2026-10-22 追加）
+## 执行状态（2026-10-22 后续复核）
 
 本文件原为 1.1 规划稿，任务状态在实施完成后**追加**如下。未逐条改写原文，避免覆盖规划内容；事实以本表为准。
 
@@ -235,15 +235,15 @@
 | BASE-01 迁移清单 | 已完成 | docs/MIGRATION.md |
 | BASE-02 契约 | 已完成 | packages/contracts、docs/PROTOCOL.md |
 | BASE-03 工程骨架与构建 | 已完成 | scripts/build.mjs、scripts/test.mjs |
-| MOD-01 新 Mod | 已完成（编译级；实机待验收） | mods/StardewAgentBridge、docs/EVIDENCE.md E3 |
+| MOD-01 新 Mod | 编译与部分实机通过，完整玩法待验收 | mods/StardewAgentBridge、FINAL_TEST_REPORT.md |
 | CORE-01 账本/控制权/动作服务 | 已完成 | packages/control-core |
 | MCP-01 MCP 双通道 | 已完成 | packages/mcp、adapters/stdio |
 | OBS-01 观察与协议对齐 | 已完成 | docs/PROTOCOL.md（实现版，含 §9 差异） |
 | CLIENT-01 宿主接入 | 代码与文档已完成；真实短任务待验收（A7） | docs/CLIENTS.md |
 | CLIENT-02 诊断与支持矩阵 | 已完成 | cli matrix、docs/TROUBLESHOOTING.md |
 | REL-01 发布包 | 已完成 | scripts/pack.ps1、release/（本地，未上传） |
-| REL-02 验收 | 自动化完成；实机 A1–A8 待执行 | docs/ACCEPTANCE.md §4/§5、docs/EVIDENCE.md |
-| WEB-01 Web 控制台 | 已完成（实进程 200；真实连接渲染待 A8） | apps/web |
+| REL-02 验收 | Node 46、C# 17、安装 17 通过；实机 A1–A6 部分，A3/A7 未完成 | FINAL_TEST_REPORT.md、docs/ACCEPTANCE.md |
+| WEB-01 Web 控制台 | 本次 9 项真实连接浏览器检查通过 | apps/web、FINAL_TEST_REPORT.md |
 
-交接摘要与未完成事项：HANDOVER_REPORT.md。
+当前结论与未完成事项：FINAL_TEST_REPORT.md；首次实现记录保留于 HANDOVER_REPORT.md。实现存在不等于每个玩法或异常分支均已验收。
 

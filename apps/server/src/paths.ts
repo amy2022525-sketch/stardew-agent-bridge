@@ -7,6 +7,7 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export interface DataPaths {
     root: string;
@@ -40,6 +41,7 @@ function resolveWebDist(sourceRoot: string, explicit?: string): string {
     const candidates = [
         path.join(sourceRoot, 'web'),
         path.join(sourceRoot, '..', 'web'),
+        path.resolve(sourceRoot, '../../web/dist'),
         path.resolve(process.cwd(), 'web'),
         path.resolve(process.cwd(), 'apps', 'web', 'dist')
     ];
@@ -66,11 +68,23 @@ export function dataPaths(root: string, webDist?: string): DataPaths {
 /** 打包后 bridge.mjs 所在目录；源码运行时为仓库根目录。 */
 function sourceRoot(): string {
     try {
-        const here = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
+        const here = path.dirname(fileURLToPath(import.meta.url));
         return here;
     } catch {
         return process.cwd();
     }
+}
+
+/** 不依赖调用者 cwd，兼容源码树和便携发布目录。 */
+export function resolveStdioAdapter(): string {
+    const here = sourceRoot();
+    const candidates = [
+        path.join(here, 'stdio-adapter.mjs'),
+        path.resolve(here, '../../../adapters/stdio/dist/index.js')
+    ];
+    const resolved = candidates.find(candidate => existsSync(candidate));
+    if (!resolved) throw new Error('未找到 stdio 适配器，请先构建项目或检查发布包文件清单。');
+    return resolved;
 }
 
 export function ensureDirs(paths: DataPaths): void {

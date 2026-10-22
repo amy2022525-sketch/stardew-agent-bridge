@@ -1,6 +1,6 @@
 # 发布检查清单
 
-用途：交回原 Codex 会话后，按本清单逐项确认，再决定是否上传/发布。**上传、建远端仓库、发 Release 不在本次交付范围内，由你执行。**
+用途：稳定版发布前的完整门槛。当前已授权公开源码预览，不发布稳定版 Release；已执行项目和未测边界以 [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md) 为准。下面未勾选项目不能视为通过，完整验收也不是公开预览源码的前提。
 
 版本：0.1.0　日期：2026-10-22
 
@@ -9,7 +9,8 @@
 - [ ] 工作区干净：`git status` 无未提交改动
 - [ ] `npm ci` 无报错（`package-lock.json` 与 `package.json` 一致）
 - [ ] `npm run build` 通过（tsc -b + Web 类型检查 + esbuild）
-- [ ] `npm test` 通过：34/34（10 套件）
+- [ ] `npm test` 通过：46/46（11 套件）
+- [ ] `npm run test:mod` 17 项、`npm run test:installer` 17 项通过
 - [ ] `scripts/build-mod.ps1 -GamePath "<游戏目录>"` 通过：0 警告 0 错误
 - [ ] `scripts/pack.ps1 -GamePath "<游戏目录>"` 通过：生成 `release/StardewAgentBridge-0.1.0/` 与 `CHECKSUMS.txt`
 - [ ] 发布目录内 `node server\bridge.mjs doctor` 与 `start` 正常，`GET /` 返回 200
@@ -21,8 +22,8 @@
 - [ ] 仓库内不含本机绝对路径（除文档示例中标注的占位）：`git grep -n "C:\\\\Users\\\\am202"`（应为空或仅示例）
 - [ ] 仓库内不含真实令牌：`git grep -niE "[0-9a-f]{64}"`（人工确认命中项都不是令牌）
 - [ ] Mod 无调试命令：`git grep -niE "warp|skipevent|giveitem|addmoney|resource" mods/`（应为空或无匹配语义）
-- [ ] Bridge/Mod 都只绑定回环，且拒绝 `Origin`（`apps/server/src/bridge.ts`、`mods/.../BridgeServer.cs` 各有一处）
-- [ ] 日志与问题包脱敏生效：导出的 zip 内不含令牌（人工打开确认）
+- [ ] Bridge/Mod 都只绑定回环；Mod 拒绝 Origin，Bridge 只允许缺省或本机同源 Origin
+- [ ] 日志与问题包脱敏生效：导出的 JSON 不含令牌、用户名和本机完整路径
 
 ## 3. 文档一致性
 
@@ -35,9 +36,9 @@
 
 ## 4. 实机验收（必须真实执行）
 
-- [ ] A1 只读链路（7 个只读工具 + 双客户端同 `snapshotId`）
+- [ ] A1 只读链路（工具真实数据 + 双客户端同实例/世界，snapshotId 可不同）
 - [ ] A2 基础动作与资源操作（含重复 `actionId` 不重复扣钱扣物）
-- [ ] A3 实时动作（钓鱼完成一次；战斗在 `minHealth` 停手）
+- [ ] A3 实时动作（钓鱼完成一次；战斗在 `minHealth` 停止发起新攻击）
 - [ ] A4 控制权（第二写者被拒、租约到期、接管后旧请求失效、`F9` 生效）
 - [ ] A5 故障（强杀 Bridge 后 5 秒内停手 + 自动暂停；重连后旧请求不生效）
 - [ ] A6 存档流程（跨日、`stardew_load` 后旧 `targetRef` 报 `STALE_REF`、返回标题后 `NO_SAVE_LOADED`）
@@ -47,14 +48,14 @@
 
 ## 5. 发布物内容确认
 
-- [ ] `release/StardewAgentBridge-0.1.0/` 只含：`mod/`（dll + manifest）、`server/`（bridge.mjs、stdio-adapter.mjs）、`web/`、`docs/`、`README(.en).md`、`LICENSE`、`NOTICE.md`、`CHANGELOG.md`、`CHECKSUMS.txt`、`启动说明.txt`、`install-mod.ps1`、`rollback-mod.ps1`
+- [ ] `release/StardewAgentBridge-0.1.0/` 只含：`mod/`（本项目 DLL + manifest）、`server/`（bridge.mjs、stdio-adapter.mjs）、`web/`、`docs/`、`README(.en).md`、`LICENSE`、`NOTICE.md`、`CHANGELOG.md`、`FINAL_TEST_REPORT.md`、`CHECKSUMS.txt`、`启动说明.txt`、`install-mod.ps1`、`rollback-mod.ps1`、`mod-install-common.ps1`
 - [ ] 不含 `node_modules/`、`*.map`、`artifacts/`、`release/`、存档、游戏 DLL、凭据
 - [ ] `CHECKSUMS.txt` 与实际文件一致（重新生成一次后比对）
 - [ ] 版本号一致：`package.json`、`mods/StardewAgentBridge/manifest.json`、`cli version`、`/health.bridgeVersion` 均为 `0.1.0`
 
 ## 6. 上传前最后一步（由你执行）
 
-- [ ] 决定仓库可见性与许可证（当前 MIT，`NOTICE.md` 已注明上游）
+- [x] 仓库可见性已由用户选择公开；当前 MIT，`NOTICE.md` 已注明上游
 - [ ] 确认提交信息与 `CHANGELOG.md` 一致
 - [ ] 准备好 release notes（可直接取 `CHANGELOG.md` 的 0.1.0 段 + 已知限制）
 - [ ] 上传后用另一台机器/干净目录试装一次（走 §3 的快速开始）

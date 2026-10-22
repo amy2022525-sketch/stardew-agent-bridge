@@ -46,7 +46,7 @@ public sealed class Observations
             ready = reasons.Count == 0, blockedBy = reasons,
             eventUp = Game1.eventUp, fadeToBlack = Game1.fadeToBlack,
             usingTool = Game1.player.UsingTool, freezePause = Game1.player.freezePause,
-            paused = Game1.paused, menuType = Game1.activeClickableMenu?.GetType().Name,
+            paused = !Game1.shouldTimePass(), menuType = Game1.activeClickableMenu?.GetType().Name,
             currentEvent = Game1.CurrentEvent is { } ev ? new { ev.id, isFestival = ev.isFestival, isWedding = ev.isWedding, playerControl = ev.playerControlSequence } : null
         };
     }

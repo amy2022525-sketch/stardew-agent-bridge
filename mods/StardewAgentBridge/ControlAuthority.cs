@@ -11,27 +11,36 @@ public sealed class ControlAuthority
     public int Epoch { get; private set; } = 1;
     public string? HolderName { get; private set; }
     public DateTime? ExpiresAt { get; private set; }
-    public bool SelfPauseOpened { get; set; }
+    private GameMenu? ownedPauseMenu;
+    private readonly Func<DateTime> now;
+    public bool SelfPauseOpened => ownedPauseMenu != null && ReferenceEquals(Game1.activeClickableMenu, ownedPauseMenu);
+    public string Mode { get; private set; } = "step";
 
-    public bool LeaseValid => HolderName != null && ExpiresAt.HasValue && ExpiresAt.Value > DateTime.UtcNow;
+    public ControlAuthority(Func<DateTime>? now = null) => this.now = now ?? (() => DateTime.UtcNow);
 
-    public void Acquire(string holder, DateTime expiresAt)
+    public bool LeaseValid => HolderName != null && ExpiresAt.HasValue && ExpiresAt.Value > now();
+
+    public void Acquire(string holder, DateTime expiresAt, string mode = "step")
     {
+        if (LeaseValid) throw new ActionFault("CONTROL_BUSY", "已有控制者，必须先释放或由玩家接管。");
+        ValidateExpiry(expiresAt);
+        if (mode is not ("step" or "realtime")) throw new ActionFault("INVALID_ARGUMENT", "mode 必须为 step 或 realtime。");
         Epoch++;
         HolderName = holder;
         ExpiresAt = expiresAt;
+        Mode = mode;
     }
 
     public void Renew(int epoch, DateTime expiresAt)
     {
-        if (epoch != Epoch) throw new ActionFault("CONTROL_EXPIRED", $"控制权代次已变化（当前 {Epoch}，请求 {epoch}），请重新获取控制权。");
+        AuthorizeWrite(epoch);
+        ValidateExpiry(expiresAt);
         ExpiresAt = expiresAt;
     }
 
     public void Release(bool pause)
     {
-        HolderName = null;
-        ExpiresAt = null;
+        Takeover();
         if (pause) TryOpenPauseMenu();
     }
 
@@ -47,13 +56,28 @@ public sealed class ControlAuthority
     {
         if (epoch == 0) throw new ActionFault("CONTROL_REQUIRED", "写动作需要控制权 epoch；请先在 Bridge 侧获取控制会话。");
         if (epoch != Epoch) throw new ActionFault("CONTROL_EXPIRED", $"控制权代次已变化（当前 {Epoch}，请求 {epoch}），旧请求已失效，请重新获取控制权并观察真实状态。");
+        if (!LeaseValid) throw new ActionFault("CONTROL_EXPIRED", "控制权已释放或租约到期，请重新获取控制权。");
+    }
+
+    private void ValidateExpiry(DateTime expiresAt)
+    {
+        if (expiresAt <= now() || expiresAt > now().AddHours(1))
+            throw new ActionFault("INVALID_ARGUMENT", "租约必须位于当前时间之后且不超过一小时。");
+    }
+
+    public void ResumeOwnPause(string command)
+    {
+        if (!SelfPauseOpened || command is "pause" or "closemenu") return;
+        if (!ownedPauseMenu!.readyToClose()) throw new ActionFault("BUSY", "暂停菜单尚不能关闭。");
+        ownedPauseMenu.exitThisMenu();
+        ownedPauseMenu = null;
     }
 
     public static object PauseState(bool selfOpened)
     {
         var menu = Game1.activeClickableMenu;
-        var state = menu == null ? "running" : "paused";
-        if (Game1.activeClickableMenu == null && (Game1.eventUp || Game1.fadeToBlack)) state = "blocked";
+        var state = !Game1.shouldTimePass() ? "paused" : "running";
+        if (menu == null && (Game1.eventUp || Game1.fadeToBlack)) state = "blocked";
         return new
         {
             state,
@@ -68,8 +92,8 @@ public sealed class ControlAuthority
         if (!Context.IsWorldReady) return false;
         if (Game1.activeClickableMenu != null) return Game1.activeClickableMenu is GameMenu;
         if (Game1.eventUp || Game1.fadeToBlack || Game1.player.UsingTool || Game1.killScreen) return false;
-        Game1.activeClickableMenu = new GameMenu();
-        SelfPauseOpened = true;
+        ownedPauseMenu = new GameMenu();
+        Game1.activeClickableMenu = ownedPauseMenu;
         return true;
     }
 }

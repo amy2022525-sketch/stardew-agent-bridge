@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 import {
     ACTION_LEDGER_LIMIT,
     BridgeError,
+    BRIDGE_VERSION,
     CONTRACTS_SCHEMA_VERSION,
     DEFAULT_ACTION_TIMEOUT_MS,
     SNAPSHOT_HARD_LIMIT_BYTES,
@@ -46,6 +47,7 @@ export interface ToolContext {
     clientId: string;
     clientName: string;
     transport: 'http' | 'stdio' | 'web' | 'cli';
+    signal?: AbortSignal;
 }
 
 export interface ToolImage {
@@ -85,7 +87,9 @@ const EFFECT_KEYS = [
     'itemId', 'slot', 'count', 'quality', 'moved', 'energyBefore', 'energyAfter',
     'healthBefore', 'healthAfter', 'money', 'detail', 'changed', 'caught', 'fish',
     'defeated', 'damage', 'reason', 'stopReason', 'menuClosed', 'sleepStarted',
-    'saved', 'daysAdvanced', 'date'
+    'saved', 'daysAdvanced', 'date', 'outcome', 'phase', 'stages', 'target', 'player',
+    'fishingState', 'requested', 'bought', 'shipped', 'spent', 'moneyBefore', 'moneyAfter',
+    'verified', 'note', 'accepted', 'saveId'
 ];
 
 function pickEffects(result: unknown): Record<string, unknown> | null {
@@ -118,6 +122,7 @@ export class ActionService {
     private readonly modPollMs: number;
     private activeActionId: string | null = null;
     private activeCommand: string | null = null;
+    private activeClientId: string | null = null;
     private actionCounter = 0;
     private world: WorldTracker = { instanceId: null, worldGeneration: null, sceneGeneration: 1, location: null };
 
@@ -156,7 +161,7 @@ export class ActionService {
         const tool = validation.tool;
         const args = validation.args;
         try {
-            if (tool.command === 'bridge:status') return this.statusResult();
+            if (tool.command === 'bridge:status') return this.statusResult(args);
             if (tool.command === 'bridge:session') return await this.handleSession(args, ctx);
             if (tool.command === 'stop') return await this.handleStop(args, ctx);
             if (tool.kind === 'read' || (tool.kind === 'mixed' && args.operation === 'list')) {
@@ -238,7 +243,7 @@ export class ActionService {
             const structured = {
                 kind: 'doctor',
                 bridge: {
-                    version: this.startedAt ? CONTRACTS_SCHEMA_VERSION : CONTRACTS_SCHEMA_VERSION,
+                    version: BRIDGE_VERSION,
                     contractsSchemaVersion: CONTRACTS_SCHEMA_VERSION,
                     port: this.port
                 },
@@ -374,6 +379,7 @@ export class ActionService {
         });
         this.activeActionId = actionId;
         this.activeCommand = tool.name;
+        this.activeClientId = ctx.clientId;
         this.events.publish('action_accepted', {
             actionId,
             command,
@@ -386,14 +392,25 @@ export class ActionService {
         let response: ModResponse | null = null;
         let transportError: BridgeError | null = null;
         try {
-            response = await this.mod.request(command, modArgs, {
+            if (ctx.signal?.aborted) throw new BridgeError('CANCELLED', '请求在派发前已取消。', { effectKnown: true, nextAction: 'observe' });
+            const pending = this.mod.request(command, modArgs, {
                 actionId,
                 epoch: session.leaseEpoch,
                 timeoutMs: tool.timeoutMs ?? DEFAULT_ACTION_TIMEOUT_MS,
                 isWrite: true
             });
+            const onAbort = () => {
+                void this.handleStop({ actionId }, ctx).catch(error => this.logger?.('warn', `取消 ${actionId} 未获确认：${String(error)}`));
+            };
+            ctx.signal?.addEventListener('abort', onAbort, { once: true });
+            if (ctx.signal?.aborted) onAbort();
+            try { response = await pending; }
+            finally { ctx.signal?.removeEventListener('abort', onAbort); }
         } catch (error) {
             transportError = BridgeError.from(error);
+            if (this.mod.connected && !transportError.fault.effectKnown) {
+                try { await this.handleStop({ actionId }, ctx); } catch { /* 结果仍待核对；不会重放。 */ }
+            }
         }
 
         const receipt = this.buildWriteReceipt({
@@ -408,6 +425,7 @@ export class ActionService {
         });
         this.activeActionId = null;
         this.activeCommand = null;
+        this.activeClientId = null;
 
         try {
             this.ledger.finish(key, receipt);
@@ -488,13 +506,20 @@ export class ActionService {
         else if (response.status === 'cancelled') status = 'cancelled';
         else if (response.status === 'unknown') status = 'unknown';
         else status = rawCode === 'TIMEOUT' || rawCode === 'RESULT_UNKNOWN' ? 'unknown' : 'failed';
+        const result = (response.result ?? {}) as Record<string, unknown>;
+        if (status === 'succeeded') {
+            if (input.command === 'load' && result.accepted === true) status = 'accepted';
+            else if (result.outcome === 'partial' || result.outcome === 'stopped') status = 'partial';
+            else if (input.command === 'buy' && typeof result.bought === 'number' && typeof result.requested === 'number' && result.bought < result.requested) status = 'partial';
+        }
 
-        const effectKnown =
+        const effectKnown = response.error?.effectKnown ?? (
             response.status === 'succeeded' || response.status === 'partial' || response.status === 'cancelled'
                 ? true
                 : status === 'failed'
                   ? true
-                  : false;
+                  : false);
+        if (!effectKnown && status === 'failed') status = 'unknown';
         const effects = pickEffects(response.result);
         // 结果不明统一用 RESULT_UNKNOWN 表达，避免被误读成普通内部错误。
         const code: string = status === 'unknown' ? 'RESULT_UNKNOWN' : normalizeModCode(rawCode);
@@ -524,7 +549,7 @@ export class ActionService {
             sceneGeneration: this.world.sceneGeneration,
             command: input.command,
             status,
-            verified: status === 'succeeded' || status === 'partial',
+            verified: typeof result.verified === 'boolean' ? result.verified : status === 'succeeded' && typeof result.snapshot === 'object' && result.snapshot !== null,
             effectKnown,
             startedAt: input.startedAt,
             finishedAt,
@@ -611,12 +636,10 @@ export class ActionService {
 
     private async handleStop(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
         const requestedActionId = typeof args.actionId === 'string' ? args.actionId : null;
-        const session = this.control.list().find((entry) => entry.clientId === ctx.clientId && entry.state === 'active') ?? null;
-        const owns = requestedActionId ? this.ledger.findById(requestedActionId) : null;
-        if (requestedActionId && owns && owns.clientId !== ctx.clientId) {
+        if (this.activeActionId && this.activeClientId !== ctx.clientId) {
             return this.errorResult('CONTROL_REQUIRED', '只能停止自己发起的动作；人工紧急停止请使用网页接管或游戏内热键。');
         }
-        if (!requestedActionId && this.ledger.recent(50, ctx.clientId).length === 0 && !session) {
+        if (!this.activeActionId || (requestedActionId && requestedActionId !== this.activeActionId)) {
             return {
                 isError: false,
                 text: '该客户端当前没有在途动作，未向游戏发送 stop。',
@@ -626,15 +649,17 @@ export class ActionService {
         if (!this.mod.connected) {
             return this.errorResult('GAME_UNAVAILABLE', '游戏 Mod 未连接，无法发送 stop。');
         }
-        const response = await this.mod.request('stop', requestedActionId ? { actionId: requestedActionId } : {}, {
+        const targetActionId = this.activeActionId;
+        const response = await this.mod.request('stop', { actionId: targetActionId }, {
             timeoutMs: 5_000,
             isWrite: false
         });
+        if (response.status !== 'succeeded') return this.errorResult(response.error?.code ?? 'RESULT_UNKNOWN', response.error?.message ?? '游戏未确认停止。');
         this.control.updatePauseFrom(extractPause(response.result));
         const result = (response.result ?? {}) as Record<string, unknown>;
         const pause = this.control.status(null, null, []).pause;
         this.events.publish('action_stopped', {
-            actionId: requestedActionId,
+            actionId: targetActionId,
             clientId: ctx.clientId,
             releasedInputs: result.releasedInputs ?? null
         });
@@ -692,8 +717,11 @@ export class ActionService {
         };
     }
 
-    private statusResult(): ToolResult {
+    private statusResult(args: Record<string, unknown>): ToolResult {
         const status = this.getStatus();
+        const receipt = typeof args.actionId === 'string' ? this.ledger.findById(args.actionId) : null;
+        const recentReceipts = this.ledger.recent(5);
+        const unresolvedReceipts = this.ledger.unresolved(10);
         const text = [
             `Bridge ${status.bridgeVersion} 端口 ${status.port}`,
             `Mod 连接=${status.mod.connected ? '是' : '否'} 实例=${status.mod.instanceId ?? '-'} 存档=${status.mod.saveLoaded ? '已加载' : '未加载'}`,
@@ -701,7 +729,8 @@ export class ActionService {
             `未决动作=${status.control.unresolvedActionIds.length} 账本可写=${status.ledger.writable ? '是' : '否'} 记录=${status.ledger.actionCount}`,
             `暂停=${status.control.pause.state}${status.control.pause.reason ? ` / ${status.control.pause.reason}` : ''}`
         ].join('\n');
-        return { isError: false, text, structured: { kind: 'status', status } };
+        const records = { receipt, recentReceipts, unresolvedReceipts };
+        return { isError: false, text: `${text}\n收据=${JSON.stringify(records)}`, structured: { kind: 'status', status, ...records } };
     }
 
     resolveReceipt(actionId: string): ActionReceipt | null {

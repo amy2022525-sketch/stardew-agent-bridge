@@ -1,5 +1,7 @@
 # Stardew Agent Bridge
 
+> Source preview (0.1.0). Review on 2026-10-22: 46 Node tests, 17 isolated C# checks, and 17 Windows installer checks passed. Real-game movement, container transfers/idempotency, crafting, placement, and Web takeover have evidence. Fishing/combat, the full transaction/day-transition matrix, and actual DSH/Codex/Claude Code host runs remain incomplete. See [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md). No stable release has been published.
+
 Let any local MCP-capable agent (DSH, Codex CLI, Claude Code, …) observe and play Stardew Valley through a SMAPI mod, a resident local bridge and a web console — one shared game capability set, one shared action ledger.
 
 - MCP is only the transport. No agent-specific plugin, no model-vendor coupling.
@@ -26,10 +28,10 @@ SMAPI mod (game main thread)  ← the only executor
 
 ## Quick start (Windows, single-player)
 
-Prerequisites: Stardew Valley 1.6.15 with SMAPI 4.5.2, Node.js ≥ 22.5, .NET SDK 6+ (build only).
+Prerequisites: Stardew Valley 1.6.15 with SMAPI 4.5.2, Node.js ≥ 22.5, .NET SDK 10 (source build and isolated checks; the mod targets net6.0).
 
 ```powershell
-npm install
+npm ci
 npm run build
 $env:STARDEW_GAME_PATH = 'F:\SteamLibrary\steamapps\common\Stardew Valley'
 npm run build:mod
@@ -60,10 +62,13 @@ Per-host instructions: [docs/CLIENTS.md](docs/CLIENTS.md). Protocol and error mo
 
 | Scope | Status |
 | --- | --- |
-| Contracts, control, ledger dedup, MCP HTTP+stdio, fault injection against a mock mod | **passing**, 34/34 |
+| Contracts, control, ledger dedup, MCP HTTP+stdio, fault injection against a mock mod | **passing**, 46/46 |
+| Isolated C# source checks / Windows installer checks | **passing**, 17 / 17 respectively |
 | Mod compiles against real game DLLs | **passing**, 0 warnings / 0 errors |
 | Live bridge + web + real MCP self-check | **passing** (including the no-game degradation path) |
-| In-game acceptance (real save, disconnect self-release, day change / save switch) | **pending on the test machine** — this delivery did not touch the running game; see [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md) §5 |
+| Real-game movement, container transfers and duplicate replay, crafting, placement | **passing for the tested cases**; see [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md) |
+| Bridge crash while waiting / Web console | Self-release observed / 9 browser checks passed |
+| Fishing, combat, remaining transactions, day transition, three real agent hosts | **pending** |
 
 ## License
 

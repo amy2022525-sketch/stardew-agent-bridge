@@ -1,6 +1,6 @@
 # Stardew Agent Bridge：Mod + Web + MCP 项目计划
 
-日期：2026-10-22（北京时间）。文档版本：1.1。状态：规划文件与独立本地 Git 仓库已准备；代码迁移、MCP/Web 实现和新项目实测尚未开始。
+日期：2026-10-22（北京时间）。文档版本：1.1（原始目标规划）。当前已实现源码并完成部分实机测试；具体状态以 [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md) 和 [任务清单](docs/TASKS.md) 为准。下文的交付目标不等同于已验收功能。
 
 建议项目名 **Stardew Agent Bridge**，GitHub 仓库名暂定 `stardew-agent-bridge`，名称可用性尚未检查。项目从现有 0.3.0 游戏桥接提取可复用部分，独立发布从 `0.1.0` 开始，并记录迁移来源。
 

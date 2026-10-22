@@ -59,6 +59,7 @@ public sealed record Response(
         "RESULT_UNKNOWN" => false,
         "TIMEOUT" => false,
         "INTERNAL_ERROR" => false,
+        "VERIFY_FAILED" or "LOAD_FAILED" => false,
         _ => true
     };
 
@@ -114,7 +115,7 @@ public static class Protocol
         {
             "hello" or "status" or "screenshot" or "stop" => r.Command == "stop" ? new[] { "actionId" } : Array.Empty<string>(),
             "snapshot" => new[] { "radius" },
-            "control" => new[] { "operation", "holder", "leaseExpiresAt", "epoch", "pause" },
+            "control" => new[] { "operation", "holder", "leaseExpiresAt", "epoch", "pause", "mode" },
             "move" => new[] { "near", "tile" }, "select" => new[] { "slot" }, "use" or "interact" or "menu" => new[] { "target" },
             "wait" => new[] { "milliseconds" }, "pause" or "closemenu" => Array.Empty<string>(),
             "shop" => Array.Empty<string>(), "buy" => new[] { "itemId", "count" },
@@ -128,7 +129,8 @@ public static class Protocol
         };
         if (r.Args.EnumerateObject().Any(p => !allowed.Contains(p.Name))) throw new ActionFault("INVALID_ARGUMENT", "请求包含未知参数。");
         bool ValidId(string? id) => id != null && System.Text.RegularExpressions.Regex.IsMatch(id, "^[a-zA-Z0-9_-]{1,80}$");
-        if (IsWrite(r.Command) && !ValidId(r.ActionId)) throw new ActionFault("INVALID_ARGUMENT", "写动作需要有效 actionId。");
+        var readOnlyContainer = r.Command == "container" && Text(r.Args, "operation") == "list";
+        if (IsWrite(r.Command) && !readOnlyContainer && !ValidId(r.ActionId)) throw new ActionFault("INVALID_ARGUMENT", "写动作需要有效 actionId。");
         if (r.Command == "snapshot" && r.Args.TryGetProperty("radius", out _) && (Integer(r.Args, "radius") < 1 || Integer(r.Args, "radius") > 16)) throw new ActionFault("INVALID_ARGUMENT", "radius 必须为 1–16。");
         if (r.Command == "select" && (Integer(r.Args, "slot") < 0 || Integer(r.Args, "slot") > 35)) throw new ActionFault("INVALID_ARGUMENT", "slot 必须为 0–35。");
         if (r.Command == "wait" && (Integer(r.Args, "milliseconds") < 100 || Integer(r.Args, "milliseconds") > 10000)) throw new ActionFault("INVALID_ARGUMENT", "milliseconds 必须为 100–10000。");

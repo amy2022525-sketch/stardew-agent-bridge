@@ -11,7 +11,7 @@ import {
     fromJsonSchema,
     type CallToolResult,
     type ContentBlock,
-    type McpRequestContext
+    type ServerContext
 } from '@modelcontextprotocol/server';
 import { TOOLS, type ToolKind } from '@sab/contracts';
 
@@ -19,6 +19,7 @@ export interface ToolContext {
     clientId: string;
     clientName: string;
     transport: 'http' | 'stdio' | 'web' | 'cli';
+    signal?: AbortSignal;
 }
 
 export interface ToolImage {
@@ -46,7 +47,7 @@ export interface CreateToolServerOptions {
     serverInfo: { name: string; version: string };
     executor: ToolExecutor;
     /** 由调用方依据认证结果构造调用者身份；不能信任模型自报的名称。 */
-    resolveContext: (request: McpRequestContext) => ToolContext;
+    resolveContext: (request: ServerContext) => ToolContext;
     logger?: Logger;
 }
 
@@ -78,9 +79,9 @@ export function createToolServer(options: CreateToolServerOptions): McpServer {
                 inputSchema: fromJsonSchema(tool.inputSchema),
                 annotations: tool.annotations
             },
-            async (args: unknown, ctx: unknown): Promise<CallToolResult> => {
-                const requestContext = ctx as McpRequestContext;
-                const toolContext = options.resolveContext(requestContext);
+            async (args: unknown, ctx: ServerContext): Promise<CallToolResult> => {
+                const resolved = options.resolveContext(ctx);
+                const toolContext = { ...resolved, signal: AbortSignal.any([ctx.mcpReq.signal, ...(resolved.signal ? [resolved.signal] : [])]) };
                 const result = await options.executor.executeTool(tool.name, args ?? {}, toolContext);
                 const content: ContentBlock[] = [{ type: 'text', text: result.text }];
                 if (result.image) {

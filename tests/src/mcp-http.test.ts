@@ -23,11 +23,11 @@ function authProvider(token: string) {
     return { token: async () => token };
 }
 
-async function httpClient(s: Stack, token = s.token): Promise<Client> {
+async function httpClient(s: Stack, token = s.token, modern = false): Promise<Client> {
     const transport = new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${s.bridgePort}/mcp`), {
         authProvider: authProvider(token)
     });
-    const client = new Client({ name: 'test-http', version: '1.0.0' });
+    const client = new Client({ name: 'test-http', version: '1.0.0' }, modern ? { versionNegotiation: { mode: { pin: '2026-07-28' } } } : {});
     await client.connect(transport);
     clients.push(client);
     return client;
@@ -45,6 +45,37 @@ after(async () => {
 });
 
 describe('HTTP MCP', () => {
+    it('真实 MCP 调用保留 Bearer 客户端身份，不把所有宿主合并为 unknown', async () => {
+        const s = await stack();
+        const a = await httpClient(s);
+        const other = s.bridge.auth.issue('second-client', 'Second client');
+        const b = await httpClient(s, other.token);
+        const doctor = await a.callTool({ name: 'stardew_doctor', arguments: {} });
+        assert.equal((doctor.structuredContent as { caller?: { clientId?: string } }).caller?.clientId, s.clientId);
+        const started = await a.callTool({ name: 'stardew_session', arguments: { operation: 'start' } });
+        const id = (started.structuredContent as { session: { controlSessionId: string } }).session.controlSessionId;
+        const denied = await b.callTool({ name: 'stardew_select', arguments: { slot: 0, controlSessionId: id } });
+        assert.equal(denied.isError, true);
+        assert.equal(s.mod.commandCount('select'), 0);
+    });
+
+    for (const modern of [false, true]) it(`取消真实 HTTP MCP 写请求会向 Mod 发送该动作的定向停止（${modern ? '2026' : '2025'}）`, async () => {
+        const s = await stack();
+        const client = await httpClient(s, s.token, modern);
+        await client.callTool({ name: 'stardew_session', arguments: { operation: 'start' } });
+        s.mod.setBehavior('wait', () => ({ status: 'succeeded', delayMs: 750, result: { changed: true } }));
+        const abort = new AbortController();
+        const running = client.callTool({ name: 'stardew_wait', arguments: { milliseconds: 1000, actionId: 'cancel-http' } }, { signal: abort.signal }).catch(() => undefined);
+        const deadline = Date.now() + 2500;
+        while (!s.mod.commandCount('wait') && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
+        assert.equal(s.mod.commandCount('wait'), 1);
+        abort.abort();
+        await running;
+        while (!s.mod.commandCount('stop') && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
+        assert.equal(s.mod.requests.find(request => request.command === 'stop')?.args.actionId, 'cancel-http', `era=${client.getProtocolEra()} version=${client.getNegotiatedProtocolVersion()}`);
+        await new Promise(resolve => setTimeout(resolve, 800));
+    });
+
     it('暴露 28 个工具，名称与契约一致', async () => {
         const s = await stack();
         const client = await httpClient(s);

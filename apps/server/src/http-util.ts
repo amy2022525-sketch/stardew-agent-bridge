@@ -5,7 +5,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 
-export function toWebRequest(req: IncomingMessage, body?: Buffer): Request {
+export function toWebRequest(req: IncomingMessage, body?: Buffer, signal?: AbortSignal): Request {
     const host = req.headers.host ?? '127.0.0.1';
     const url = `http://${host}${req.url ?? '/'}`;
     const headers = new Headers();
@@ -18,7 +18,7 @@ export function toWebRequest(req: IncomingMessage, body?: Buffer): Request {
         }
     }
     const method = (req.method ?? 'GET').toUpperCase();
-    const init: RequestInit & { duplex?: 'half' } = { method, headers };
+    const init: RequestInit & { duplex?: 'half' } = { method, headers, signal };
     if (method !== 'GET' && method !== 'HEAD') {
         init.body = body && body.length > 0 ? body : Readable.toWeb(req);
         init.duplex = 'half';
@@ -40,12 +40,13 @@ export async function writeWebResponse(res: ServerResponse, response: Response):
         return;
     }
     const stream = Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]);
+    if ((response.headers.get('content-type') ?? '').includes('text/event-stream')) res.flushHeaders();
     await new Promise<void>((resolve, reject) => {
         stream.on('error', (error) => {
             res.destroy(error as Error);
             reject(error);
         });
-        res.on('close', () => resolve());
+        res.on('close', () => { stream.destroy(); resolve(); });
         stream.pipe(res);
         res.on('finish', () => resolve());
     });

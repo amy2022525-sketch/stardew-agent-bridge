@@ -21,6 +21,8 @@
     "build:mod": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-mod.ps1",
     "typecheck": "node scripts/build.mjs --check-only",
     "test": "node scripts/test.mjs",
+    "test:mod": "dotnet run --project tests/mod/ControlTests.csproj",
+    "test:installer": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/install-rollback.ps1",
     "test:unit": "node --test \"tests/dist/**/*.test.js\"",
     "start": "node apps/server/dist/cli.js start",
     "doctor": "node apps/server/dist/cli.js doctor",

@@ -11,7 +11,7 @@ import { AuthStore, loadConfig } from './config.js';
 import { Bridge } from './bridge.js';
 import { generateHostConfig, HOST_LABELS, HOST_SUPPORT_MATRIX, type HostId, type TransportMode } from './hosts.js';
 import { Logger } from './logger.js';
-import { dataPaths, ensureDirs, resolveDataDir } from './paths.js';
+import { dataPaths, ensureDirs, resolveDataDir, resolveStdioAdapter } from './paths.js';
 
 interface ParsedArgs {
     command: string;
@@ -226,7 +226,7 @@ function cmdHosts(flags: Record<string, string | boolean>): number {
         clientName: HOST_LABELS[host],
         token: credential.token,
         bridgeUrl: `http://127.0.0.1:${endpointPort}/mcp`,
-        stdioAdapterPath: path.resolve(process.cwd(), 'adapters', 'stdio', 'dist', 'index.js'),
+        stdioAdapterPath: resolveStdioAdapter(),
         nodeExecutable: process.execPath,
         dataDir: paths.root
     });

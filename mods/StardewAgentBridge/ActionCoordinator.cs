@@ -12,7 +12,7 @@ public interface IGameAction
 // 缓存被淘汰也不能让消费动作重新执行，这是扣钱/扣物品类动作的最后一道保险。
 public sealed class ActionCoordinator
 {
-    private sealed record Active(Request Request, object Owner, IGameAction Action, DateTime Deadline, Action<Response> Reply);
+    private sealed record Active(Request Request, object Owner, IGameAction Action, DateTime StartedAt, DateTime Deadline, Action<Response> Reply);
 
     private Active? active;
     private readonly Dictionary<string, string> seen = new();
@@ -84,13 +84,14 @@ public sealed class ActionCoordinator
         }
         // 先记录 ID：即使创建动作时游戏抛错，重试也不能再次消费物品。
         seen.Add(id, Signature(request));
-        try { active = new(request, owner, create(), deadline, reply); }
+        try { active = new(request, owner, create(), DateTime.UtcNow, deadline, reply); }
         catch (Exception error)
         {
             if (error is not ActionFault) OnError?.Invoke(error);
             var response = Fault(request, error);
+            response = decorate(response);
             Remember(response);
-            reply(decorate(response));
+            reply(response);
         }
     }
 
@@ -107,13 +108,13 @@ public sealed class ActionCoordinator
         catch (Exception error)
         {
             if (error is not ActionFault) OnError?.Invoke(error);
-            Finish(Fault(active!.Request, error));
+            Finish(Fault(active!.Request, error, mayHaveEffects: true));
         }
     }
 
     public void Stop(string code = "CANCELLED", string message = "已停止自动动作并释放输入。")
     {
-        if (active != null) Finish(Response.Fail(active.Request, code, message, control.Epoch, Elapsed(active)));
+        if (active != null) Finish(Response.Unknown(active.Request, code, message, control.Epoch, Elapsed(active)));
     }
 
     /// <summary>只停止指定 actionId 的动作；不是自己发起的就不动。返回是否真的停掉了某个动作。</summary>
@@ -133,7 +134,7 @@ public sealed class ActionCoordinator
         order.Clear();
     }
 
-    private static long Elapsed(Active active) => (long)(DateTime.UtcNow - active.Deadline).TotalMilliseconds;
+    private static long Elapsed(Active active) => Math.Max(0, (long)(DateTime.UtcNow - active.StartedAt).TotalMilliseconds);
 
     private void Finish(Response response)
     {
@@ -149,8 +150,9 @@ public sealed class ActionCoordinator
                 Error = new Fault("RESULT_UNKNOWN", "停止动作时发生异常，结果不明。", false, "query_action")
             };
         }
+        response = decorate(response);
         Remember(response);
-        prior.Reply(decorate(response));
+        prior.Reply(response);
     }
 
     private void Remember(Response response)
@@ -161,7 +163,9 @@ public sealed class ActionCoordinator
         while (order.Count > 256) completed.Remove(order.Dequeue());
     }
 
-    private Response Fault(Request request, Exception error) => error is ActionFault fault
-        ? Response.Fail(request, fault.Code, fault.Message, control.Epoch, 0)
+    private Response Fault(Request request, Exception error, bool mayHaveEffects = false) => error is ActionFault fault
+        ? mayHaveEffects
+            ? Response.Unknown(request, fault.Code, fault.Message, control.Epoch, 0)
+            : Response.Fail(request, fault.Code, fault.Message, control.Epoch, 0)
         : Response.Unknown(request, "INTERNAL_ERROR", "游戏动作发生异常：结果不明，请重新观察并查看 SMAPI 日志。", control.Epoch, 0);
 }

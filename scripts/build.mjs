@@ -15,7 +15,7 @@ function run(command, args, options = {}) {
     const result = spawnSync(command, args, {
         cwd: root,
         stdio: 'inherit',
-        shell: process.platform === 'win32',
+        shell: false,
         ...options
     });
     if (result.status !== 0) {
@@ -24,23 +24,24 @@ function run(command, args, options = {}) {
 }
 
 console.log('[build] TypeScript 项目引用编译…');
-run('npx', ['tsc', '-b', ...(checkOnly ? [] : []), '--pretty', 'false']);
+run(process.execPath, [path.join(root, 'node_modules/typescript/bin/tsc'), '-b', '--pretty', 'false']);
+
+console.log('[build] 类型检查 Web 控制台…');
+run(process.execPath, [path.join(root, 'node_modules/typescript/bin/tsc'), '-p', 'apps/web', '--noEmit', '--pretty', 'false']);
 
 if (checkOnly) {
     console.log('[build] 仅类型检查完成。');
     process.exit(0);
 }
 
-console.log('[build] 类型检查 Web 控制台…');
-run('npx', ['tsc', '-p', 'apps/web', '--noEmit', '--pretty', 'false']);
 
 console.log('[build] 打包 Web 控制台…');
 const webRoot = path.join(root, 'apps', 'web');
 const dist = path.join(webRoot, 'dist');
 if (!existsSync(dist)) mkdirSync(dist, { recursive: true });
 
-run('npx', [
-    'esbuild',
+run(process.execPath, [
+    path.join(root, 'node_modules/esbuild/bin/esbuild'),
     path.join(webRoot, 'src', 'main.ts'),
     '--bundle',
     '--format=esm',

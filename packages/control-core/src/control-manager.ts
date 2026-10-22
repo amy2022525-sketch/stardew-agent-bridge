@@ -54,6 +54,8 @@ export class ControlManager {
     private readonly emit: (kind: string, payload: Record<string, unknown>) => void;
     private readonly sessions = new Map<string, MutableSession>();
     private activeId: string | null = null;
+    private acquiring = false;
+    private takingOver = false;
     private sweeper: NodeJS.Timeout | null = null;
     private pause: PauseReport = { requested: false, state: 'unknown', reason: null, menuType: null };
 
@@ -75,6 +77,7 @@ export class ControlManager {
         if (!this.activeId) return;
         const session = this.sessions.get(this.activeId);
         if (!session) return;
+        if (session.worldGeneration === null && worldGeneration !== null) session.worldGeneration = worldGeneration;
         const instanceChanged = instanceId !== null && session.gameInstanceId !== null && instanceId !== session.gameInstanceId;
         const worldChanged = worldGeneration !== null && session.worldGeneration !== null && worldGeneration !== session.worldGeneration;
         if (!instanceChanged && !worldChanged) return;
@@ -89,8 +92,8 @@ export class ControlManager {
 
     /** 取得控制权。两个客户端并发 start 时只有一个成功。 */
     async start(options: StartOptions): Promise<ControlSessionInfo> {
-        if (this.activeId) {
-            const holder = this.sessions.get(this.activeId);
+        if (this.activeId || this.acquiring || this.takingOver) {
+            const holder = this.activeId ? this.sessions.get(this.activeId) : undefined;
             throw new BridgeError(
                 'CONTROL_BUSY',
                 `控制权已被 ${holder?.clientName ?? '其他客户端'} 持有（会话 ${this.activeId}）。请等待其 end 或由用户在网页人工接管。`
@@ -99,12 +102,18 @@ export class ControlManager {
         if (!this.mod.connected) {
             throw new BridgeError('GAME_UNAVAILABLE', '游戏 Mod 未连接，无法取得控制权。');
         }
+        this.acquiring = true;
+        try { return await this.acquire(options); }
+        finally { this.acquiring = false; }
+    }
+
+    private async acquire(options: StartOptions): Promise<ControlSessionInfo> {
         const mode: SessionMode = options.mode ?? 'step';
         const leaseExpiresAt = new Date(this.now() + this.leaseTtlMs).toISOString();
         // 先由 Mod 确认新代次；只有拿到 epoch 才认为控制权交接完成。
         const result = await this.mod.request(
             'control',
-            { operation: 'acquire', holder: options.label ?? options.clientName, leaseExpiresAt },
+            { operation: 'acquire', holder: options.label ?? options.clientName, leaseExpiresAt, mode },
             { isWrite: true, timeoutMs: 10_000 }
         );
         if (result.status !== 'succeeded') {
@@ -125,7 +134,7 @@ export class ControlManager {
             mode,
             leaseEpoch: control.epoch,
             gameInstanceId: this.mod.hello?.instanceId ?? null,
-            worldGeneration: null,
+            worldGeneration: this.mod.hello?.worldGeneration ?? null,
             startedAt: new Date(this.now()).toISOString(),
             lastActivityAt: new Date(this.now()).toISOString(),
             expiresAt: leaseExpiresAt,
@@ -155,14 +164,15 @@ export class ControlManager {
         if (!session || session.state !== 'active') return;
         session.lastActivityAt = new Date(this.now()).toISOString();
         session.expiresAt = new Date(this.now() + this.leaseTtlMs).toISOString();
-        if (this.now() >= session.renewAt && this.mod.connected) {
+        if (this.mod.connected) {
             session.renewAt = this.now() + 60_000;
             try {
-                await this.mod.request(
+                const response = await this.mod.request(
                     'control',
                     { operation: 'renew', epoch: session.leaseEpoch, leaseExpiresAt: session.expiresAt },
                     { isWrite: false, timeoutMs: 5_000 }
                 );
+                if (response.status !== 'succeeded') await this.closeSession(session, 'renew_rejected', { revokeMod: false });
             } catch {
                 this.logger?.('debug', '续租通知 Mod 失败，将在下次活动重试');
             }
@@ -209,6 +219,14 @@ export class ControlManager {
 
     /** 人工接管（网页/CLI）：撤销旧代次、停止输入、记录真实暂停结果。 */
     async takeover(reason = 'manual_takeover'): Promise<{ closedSessionIds: string[]; pause: PauseReport; epoch: number }> {
+        if (this.takingOver) throw new BridgeError('CONTROL_BUSY', '已有人工接管正在执行。');
+        this.takingOver = true;
+        try { return await this.performTakeover(reason); }
+        finally { this.takingOver = false; }
+    }
+
+    private async performTakeover(reason: string): Promise<{ closedSessionIds: string[]; pause: PauseReport; epoch: number }> {
+        while (this.acquiring) await new Promise(resolve => setTimeout(resolve, 5));
         if (!this.mod.connected) throw new BridgeError('GAME_UNAVAILABLE', '游戏 Mod 未连接，无法接管。');
         const result = await this.mod.request('control', { operation: 'takeover' }, { isWrite: true, timeoutMs: 10_000 });
         if (result.status !== 'succeeded') {
@@ -311,7 +329,11 @@ export class ControlManager {
     fromHello(hello: ModHello | null): void {
         if (!hello) return;
         this.updatePauseFrom(hello.pause);
-        this.bindWorld(hello.instanceId, null);
+        this.bindWorld(hello.instanceId, hello.worldGeneration ?? null);
+        const holder = this.activeId ? this.sessions.get(this.activeId) : undefined;
+        if (holder?.state === 'active' && hello.epoch > holder.leaseEpoch) {
+            void this.closeSession(holder, 'mod_control_changed', { revokeMod: false });
+        }
     }
 
     status(activeActionId: string | null, activeCommand: string | null, unresolved: string[]): ControlStatus {
