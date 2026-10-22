@@ -1,6 +1,6 @@
 # 把 Bridge 接进 Agent 宿主
 
-提供 **DSH**、**Codex CLI**、**Claude Code** 的配置模板，均通过标准 MCP 连接。HTTP/stdio 已用 SDK 测试，三种真实宿主各自完成短任务仍待验收；模板不代表所有宿主版本已经实测。当前结果见 [复核报告](../FINAL_TEST_REPORT.md)。
+提供 **DSH**、**Codex CLI**、**Claude Code** 的配置模板，均通过标准 MCP 连接。HTTP/stdio 已用 SDK 测试；DSH Desktop 0.2.0-rc.2 + MCP连接器 0.2.70 已验证 stdio 连接及真实模型只读调用。三种宿主各自完成游戏短任务仍待验收；模板不代表所有宿主版本已经实测。当前结果见 [复核报告](../FINAL_TEST_REPORT.md)。
 
 生成片段（推荐，令牌自动签发并写好本机路径）：
 
@@ -15,7 +15,7 @@ node apps/server/dist/cli.js matrix        # 支持矩阵
 
 | 宿主 | HTTP（推荐） | stdio |
 | --- | --- | --- |
-| DSH | 模板；导入入口需按安装版本核对 | 模板；需按安装版本核对 |
+| DSH | 模板；导入入口需按安装版本核对 | 上述桌面版本已验证 28 工具发现与只读调用 |
 | Codex CLI | 模板：`url`；需按安装版本核对 | 模板：`~/.codex/config.toml` |
 | Claude Code | 模板：`.mcp.json`（`type: "http"`）或 `claude mcp add` | 模板：`.mcp.json`（`type: "stdio"`） |
 
@@ -34,6 +34,8 @@ HTTP 与 stdio **指向同一个常驻 Bridge、同一份业务核心**；stdio 
 5. 第一次让 Agent 动手前，让 Agent 调用 `stardew_session {operation:"start"}`。网页获取控制权属于网页自身身份；它与 Agent 会竞争同一个写入权。
 
 stdio 变体：`--transport stdio`，把 JSON 导入 DSH 的「自定义 stdio」。片段里的 `command`/`args`/`env` 已填好本机绝对路径与 `SAB_HOME`；令牌不进命令行，适配器从 `SAB_HOME` 下的凭据文件读取。
+
+已验收版本也可从侧栏 **MCP连接器 → 添加连接 → 导入 JSON** 导入 stdio 片段，选择全局或指定 Workspace 范围；随后在「已安装」确认 `stardew` 已连接，并在标准模式调用 `mcp__stardew__stardew_status`。只复制输出的 JSON 段，不包含 `#` 开头的提示文字。游戏处于标题页时，`stardew_snapshot` 返回 `NO_SAVE_LOADED` 是明确的业务结果。
 
 ## 2. Codex CLI
 

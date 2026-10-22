@@ -2,16 +2,12 @@
  * 工具参数校验：JSON Schema（MCP 层）+ 业务边界（游戏侧仍独立校验）。
  * 任何非法参数必须在产生游戏副作用之前被拒绝。
  */
-import { createRequire } from 'node:module';
-import type { ValidateFunction } from 'ajv';
+import { Ajv, type ValidateFunction } from 'ajv';
 import type { JsonSchema, ToolSpec } from './tools.js';
 import { getTool } from './tools.js';
 
-// ajv 8 只发布 CommonJS 入口，这里用 createRequire 显式加载以保证 ESM 下行为一致。
-const require = createRequire(import.meta.url);
-type AjvInstance = { compile(schema: unknown): ValidateFunction };
-const AjvCtor = require('ajv') as new (options?: Record<string, unknown>) => AjvInstance;
-const ajv = new AjvCtor({ allErrors: true, strict: false, coerceTypes: false, allowUnionTypes: true });
+// 静态导入让发布打包器把 Ajv 一起收进单文件，安装后无需开发目录的 node_modules。
+const ajv = new Ajv({ allErrors: true, strict: false, coerceTypes: false, allowUnionTypes: true });
 const compiled = new Map<string, ValidateFunction>();
 
 function compile(name: string, schema: JsonSchema): ValidateFunction {

@@ -103,6 +103,10 @@ $lines = Get-ChildItem $out -Recurse -File | Sort-Object FullName | ForEach-Obje
 }
 $lines | Set-Content (Join-Path $out 'CHECKSUMS.txt') -Encoding UTF8
 
+Write-Host '[pack] 仓库外独立启动与 MCP 回环验收…'
+& node scripts/verify-package.mjs $out | Out-Host
+if ($LASTEXITCODE -ne 0) { throw '发布包无法在仓库外独立运行。' }
+
 Write-Host "[pack] 完成：$out"
 $total = (Get-ChildItem $out -Recurse -File | Measure-Object -Property Length -Sum).Sum
 Write-Host ("[pack] 文件数 {0}，合计 {1:N1} MB（压缩包由你手动生成，脚本不自动上传）" -f (Get-ChildItem $out -Recurse -File).Count, ($total / 1MB))
