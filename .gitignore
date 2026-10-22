@@ -1,0 +1,55 @@
+# Runtime state and local configuration
+.env
+.env.*
+!.env.example
+*.local.json
+*.local.toml
+*.local.yml
+runtime-data/
+logs/
+outputs/
+work/
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.log
+
+# Dependencies and build results
+node_modules/
+dist/
+coverage/
+**/bin/
+**/obj/
+.vs/
+artifacts/
+releases/
+*.tgz
+
+# Game installation references and saves stay outside the repository
+game-local/
+saves-local/
+GamePath.props
+
+# Local client settings
+.mcp.json
+.claude/settings.local.json
+.codex/config.toml
+
+# OS metadata
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Game binaries, mod build output and test artifacts never enter the public package
+*.dll
+*.pdb
+Stardew Valley.dll
+StardewModdingAPI.dll
+release/
+release-*/
+screenshots/
+problem-bundles/
+*.tsbuildinfo

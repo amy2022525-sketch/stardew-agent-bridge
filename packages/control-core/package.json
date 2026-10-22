@@ -1,0 +1,19 @@
+{
+  "name": "@sab/control-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "控制会话、租约、动作账本（SQLite）、动作服务与事件流。",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@sab/contracts": "*",
+    "@sab/game-client": "*"
+  }
+}

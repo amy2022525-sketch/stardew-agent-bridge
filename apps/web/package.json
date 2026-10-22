@@ -1,0 +1,13 @@
+{
+  "name": "@sab/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Stardew Agent Bridge Web 控制台（TypeScript 单页，无框架）。",
+  "type": "module",
+  "scripts": {
+    "build": "node ../../scripts/build-web.mjs"
+  },
+  "dependencies": {
+    "@sab/contracts": "*"
+  }
+}

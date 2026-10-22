@@ -1,0 +1,19 @@
+{
+  "name": "@sab/game-client",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bridge ↔ SMAPI Mod 本机 WebSocket 连接、握手、心跳与请求路由。",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@sab/contracts": "*",
+    "ws": "8.22.0"
+  }
+}

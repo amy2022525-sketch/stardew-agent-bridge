@@ -1,0 +1,12 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/contracts" },
+    { "path": "packages/game-client" },
+    { "path": "packages/control-core" },
+    { "path": "packages/mcp" },
+    { "path": "apps/server" },
+    { "path": "adapters/stdio" },
+    { "path": "tests" }
+  ]
+}

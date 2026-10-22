@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Stardew Agent Bridge 控制台</title>
+    <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand">
+            <span class="dot" id="mod-dot" aria-hidden="true"></span>
+            <strong>Stardew Agent Bridge</strong>
+            <span class="version" id="bridge-version">…</span>
+        </div>
+        <div class="topbar-actions">
+            <span class="pill" id="pause-pill">暂停状态未知</span>
+            <button id="btn-refresh" type="button">刷新</button>
+        </div>
+    </header>
+
+    <main>
+        <section class="card" id="status-card">
+            <h2>连接与状态</h2>
+            <dl class="grid" id="status-grid"></dl>
+            <p class="notice" id="status-notice"></p>
+        </section>
+
+        <section class="card" id="control-card">
+            <h2>控制权</h2>
+            <dl class="grid" id="control-grid"></dl>
+            <div class="actions">
+                <button id="btn-start" type="button" class="primary">开始控制（分步）</button>
+                <button id="btn-takeover" type="button" class="danger">人工接管</button>
+                <button id="btn-end" type="button">结束控制</button>
+                <button id="btn-stop" type="button">停止动作</button>
+                <button id="btn-pause" type="button">打开暂停菜单</button>
+                <button id="btn-closemenu" type="button">关闭菜单</button>
+                <button id="btn-snapshot" type="button">刷新快照</button>
+                <button id="btn-screenshot" type="button">真实截图</button>
+            </div>
+            <p class="hint">人工接管会撤销 Agent 的控制权、停止当前动作并释放输入；不会替你关闭自己打开的菜单或跳过剧情。</p>
+        </section>
+
+        <section class="card" id="snapshot-card">
+            <h2>观察快照</h2>
+            <pre id="snapshot-text" class="mono">尚未观察。</pre>
+            <div id="screenshot-wrap" class="hidden">
+                <img id="screenshot" alt="游戏画面截图" />
+            </div>
+        </section>
+
+        <section class="card" id="timeline-card">
+            <h2>动作与事件时间线</h2>
+            <ol id="timeline" class="timeline"></ol>
+        </section>
+
+        <section class="card" id="notes-card">
+            <h2>进度笔记</h2>
+            <pre id="notes-text" class="mono">（尚无进度笔记）</pre>
+        </section>
+
+        <section class="card" id="host-card">
+            <h2>连接其他 Agent 宿主</h2>
+            <p class="hint">生成的是“已包含令牌”的本机配置；令牌等价于密码，请勿提交到仓库。</p>
+            <div class="actions">
+                <label>宿主
+                    <select id="host-select">
+                        <option value="dsh">DSH</option>
+                        <option value="codex">Codex CLI</option>
+                        <option value="claude-code">Claude Code</option>
+                    </select>
+                </label>
+                <label>传输
+                    <select id="transport-select">
+                        <option value="http">HTTP（/mcp）</option>
+                        <option value="stdio">stdio 适配器</option>
+                    </select>
+                </label>
+                <button id="btn-host" type="button" class="primary">生成配置</button>
+                <button id="btn-copy" type="button">复制</button>
+            </div>
+            <p class="mono small" id="host-target"></p>
+            <pre id="host-snippet" class="mono">尚未生成。</pre>
+            <ul id="host-notes" class="notes"></ul>
+        </section>
+
+        <section class="card" id="diag-card">
+            <h2>诊断</h2>
+            <div class="actions">
+                <button id="btn-diag" type="button">查看脱敏诊断</button>
+                <button id="btn-bundle" type="button" class="primary">导出问题包</button>
+            </div>
+            <pre id="diag-text" class="mono small">尚未加载。</pre>
+        </section>
+    </main>
+
+    <footer>
+        <span>数据目录与日志保存在本机；本页面不含遥测。</span>
+    </footer>
+
+    <script type="module" src="/app.js"></script>
+</body>
+</html>

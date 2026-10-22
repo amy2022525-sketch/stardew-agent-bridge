@@ -1,0 +1,16 @@
+{
+  "name": "@sab/stdio-adapter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "stdio MCP 适配器：把只能启动子进程的宿主连接到同一个常驻 Bridge。",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "stardew-agent-bridge-stdio": "./dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.3.1",
+    "@sab/contracts": "*",
+    "@sab/mcp": "*"
+  }
+}

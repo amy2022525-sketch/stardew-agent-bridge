@@ -1,0 +1,16 @@
+{
+  "name": "@sab/tests",
+  "version": "0.1.0",
+  "private": true,
+  "description": "契约、控制权、幂等与故障注入测试（含模拟 Mod）。",
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
+    "@sab/contracts": "*",
+    "@sab/control-core": "*",
+    "@sab/game-client": "*",
+    "@sab/mcp": "*",
+    "@sab/server": "*",
+    "ws": "8.22.0"
+  }
+}

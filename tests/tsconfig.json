@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist"
+  },
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../packages/contracts" },
+    { "path": "../packages/game-client" },
+    { "path": "../packages/control-core" },
+    { "path": "../packages/mcp" },
+    { "path": "../apps/server" }
+  ]
+}

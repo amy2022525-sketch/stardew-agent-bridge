@@ -1,0 +1,19 @@
+{
+  "name": "@sab/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP 工具注册：把 28 个 stardew_* 工具映射到唯一业务入口。",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.3.1",
+    "@sab/contracts": "*"
+  }
+}

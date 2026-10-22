@@ -1,0 +1,44 @@
+{
+  "name": "stardew-agent-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "星露谷本机 SMAPI 桥接 + Web 控制台 + MCP 服务：让支持 MCP 的本地 Agent 观察和游玩星露谷。",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/server",
+    "apps/web",
+    "adapters/*",
+    "tests"
+  ],
+  "scripts": {
+    "clean": "node scripts/clean.mjs",
+    "build": "node scripts/build.mjs",
+    "build:mod": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-mod.ps1",
+    "typecheck": "node scripts/build.mjs --check-only",
+    "test": "node scripts/test.mjs",
+    "test:unit": "node --test \"tests/dist/**/*.test.js\"",
+    "start": "node apps/server/dist/cli.js start",
+    "doctor": "node apps/server/dist/cli.js doctor",
+    "pack": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/pack.ps1",
+    "install:mod": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-mod.ps1",
+    "rollback:mod": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/rollback-mod.ps1"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
+    "@types/node": "22.20.5",
+    "@types/ws": "8.18.2",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.3.1",
+    "ajv": "8.20.0",
+    "ws": "8.22.0"
+  }
+}
+

@@ -1,0 +1,113 @@
+# 把 Bridge 接进 Agent 宿主
+
+三个已验证的宿主：**DSH**、**Codex CLI**、**Claude Code**。三者都走标准 MCP，不装本项目专用插件。
+
+生成片段（推荐，令牌自动签发并写好本机路径）：
+
+```powershell
+node apps/server/dist/cli.js hosts --host <dsh|codex|claude-code> --transport <http|stdio> [--client-id <id>]
+node apps/server/dist/cli.js matrix        # 支持矩阵
+```
+
+网页控制台的「连接其他 Agent 宿主」卡片做的是同一件事。
+
+## 0. 选择传输方式
+
+| 宿主 | HTTP（推荐） | stdio |
+| --- | --- | --- |
+| DSH | 支持：设置 → MCP 连接器 → 导入 JSON | 支持：同一入口选「自定义 stdio」 |
+| Codex CLI | 取决于版本（较新版本支持 `url`） | 支持：`~/.codex/config.toml` |
+| Claude Code | 支持：`.mcp.json`（`type: "http"`）或 `claude mcp add` | 支持：`.mcp.json`（`type: "stdio"`） |
+
+HTTP 与 stdio **指向同一个常驻 Bridge、同一份业务核心**；stdio 适配器只做转发，不复制业务逻辑。因此：
+
+- 同一个游戏实例、同一份动作账本、同一个控制权；
+- 无论用哪种传输，写操作都受"单一写者 + lease + epoch"约束；
+- 宿主先启动或后启动都行，Bridge 没起来时宿主会报连接失败，起来后重连即可。
+
+## 1. DSH
+
+1. 启动 Bridge：`npm start`（保持运行）。
+2. 生成片段：`node apps/server/dist/cli.js hosts --host dsh --transport http`。
+3. DSH 里打开 **设置 → MCP 连接器 → 导入 JSON**，粘贴输出（`mcpServers` 段），或使用连接器界面的「自定义 HTTP」逐项填写：名称 `stardew`、URL `http://127.0.0.1:17655/mcp`、鉴权 `Bearer` + 令牌。
+4. 在会话里确认工具出现：`stardew_status`、`stardew_snapshot`…
+5. 第一次让 Agent 动手前，先在网页点「获取控制权」，或让 Agent 调用 `stardew_session {operation:"start"}`。
+
+stdio 变体：`--transport stdio`，把 JSON 导入 DSH 的「自定义 stdio」。片段里的 `command`/`args`/`env` 已填好本机绝对路径与 `SAB_HOME`；令牌不进命令行，适配器从 `SAB_HOME` 下的凭据文件读取。
+
+## 2. Codex CLI
+
+HTTP（版本支持时）：
+
+```toml
+# ~/.codex/config.toml
+[mcp_servers.stardew]
+url = "http://127.0.0.1:17655/mcp"
+bearer_token_env_var = "SAB_TOKEN"
+```
+
+```powershell
+$env:SAB_TOKEN = "<token issue 输出或网页显示>"   # 每次启动会话前设置
+codex
+```
+
+stdio（老版本也能用）：
+
+```toml
+[mcp_servers.stardew]
+command = "<node.exe 绝对路径>"
+args = ["<仓库或发布目录>\\adapters\\stdio\\dist\\index.js"]   # 发布包里是 server\\stdio-adapter.mjs
+env = { SAB_CLIENT_ID = "codex", SAB_HOME = "C:\\Users\\<你>\\AppData\\Local\\StardewAgentBridge" }
+```
+
+片段里的 `command` / `args` / `SAB_HOME` 由 `hosts --host codex --transport stdio` 自动填好，直接复制即可。
+
+## 3. Claude Code
+
+```powershell
+# 项目级文件 .mcp.json
+node apps/server/dist/cli.js hosts --host claude-code --transport http > .mcp.json   # 或用下面的 CLI 命令
+claude mcp add --transport http stardew http://127.0.0.1:17655/mcp --header "Authorization: Bearer <token>"
+```
+
+`.mcp.json`（HTTP）：
+
+```json
+{
+  "mcpServers": {
+    "stardew": {
+      "type": "http",
+      "url": "http://127.0.0.1:17655/mcp",
+      "headers": { "Authorization": "Bearer <token>" }
+    }
+  }
+}
+```
+
+stdio 变体把 `type` 换成 `"stdio"` 并给 `command`/`args`/`env`（同 Codex 的 stdio 片段）。
+
+## 4. 验证接入（三种宿主通用）
+
+1. `node apps/server/dist/cli.js doctor`：应显示 `Mod 连接=是`。
+2. `node scripts/smoke.mjs`：走真实 HTTP MCP，打印工具数、`stardew_status`、`stardew_snapshot`。
+3. 宿主里调用 `stardew_status`：能看到同一份 Bridge 状态（客户端列表里会出现宿主自己的 `clientId`）。
+4. 两个宿主同时连着，分别调用 `stardew_snapshot`：应得到同一 `snapshotId`/同一世界，证明多客户端读同一世界。
+5. 让 A 宿主 `stardew_session start`，B 宿主直接调写工具：应得到 `CONTROL_BUSY`/`CONTROL_REQUIRED`，证明写者独占。
+
+## 5. 令牌与身份
+
+- 每个宿主建议一个 `clientId`（`dsh`、`codex`、`claude-code`）；账本与回执按客户端可区分。
+- 令牌只在 `token issue`/`token rotate` 时显示一次；`credentials.json` 是唯一持久位置。
+- 轮换：`node apps/server/dist/cli.js token rotate dsh`，然后更新宿主配置里的令牌。**Mod 无需重启**；Bridge 会热加载凭据文件。
+- 吊销：`token revoke dsh`；`GET /api/v1/clients`（网页）可看当前客户端。
+
+## 6. 常见接入问题
+
+| 现象 | 原因与处理 |
+| --- | --- |
+| 宿主报 `Unauthorized` | 令牌不对/已被轮换；重新 `token issue` 并更新宿主配置 |
+| 工具列表为空 | 用了 stdio 但 `command` 路径不对；先用同样参数手工跑一次，确认 stderr 里的错误 |
+| `BRIDGE_NOT_RUNNING` | 常驻 Bridge 没启动；`npm start` |
+| `GAME_UNAVAILABLE` | Mod 未连接：游戏没走 SMAPI 启动、Mod 未安装、或存档未加载 |
+| `CONTROL_REQUIRED` | 还没有控制会话；先 `stardew_session start` 或网页获取控制权 |
+| 写操作总 `CONTROL_EXPIRED` | 刚才发生过接管/断线/换存档；重新 `stardew_session start` 并重新观察 |

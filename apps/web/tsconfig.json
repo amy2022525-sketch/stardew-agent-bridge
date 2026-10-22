@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": [],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "composite": false,
+    "incremental": false,
+    "sourceMap": false
+  },
+  "include": ["src/**/*.ts"]
+}
