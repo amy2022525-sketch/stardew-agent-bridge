@@ -28,7 +28,9 @@ async function freePort(): Promise<number> {
                 });
             });
         } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw error;
+            // Windows may reserve a port range and reject it with EACCES.
+            // Skip that candidate too; all other errors still fail immediately.
+            if (!['EADDRINUSE', 'EACCES'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
         }
     }
     throw new Error('Unable to reserve a test port after 32 attempts.');

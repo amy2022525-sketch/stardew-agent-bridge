@@ -42,7 +42,7 @@ const freePort = async () => {
         const port = randomInt(20000, 60000);
         const server = createServer();
         try { await new Promise((resolve, reject) => server.once('error', reject).listen(port, '127.0.0.1', resolve)); }
-        catch (e) { if (e.code === 'EADDRINUSE') continue; throw e; }
+        catch (e) { if (e.code === 'EADDRINUSE' || e.code === 'EACCES') continue; throw e; }
         await new Promise(resolve => server.close(resolve));
         return port;
     }
