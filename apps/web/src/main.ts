@@ -3,11 +3,7 @@
  * 只调用本机 /api/v1 接口；所有写操作需网页会话 + CSRF，且经过同一业务核心。
  */
 import type { ActionReceipt, BridgeStatus, ControlSessionInfo } from '@sab/contracts';
-
-interface HostSnippetResponse {
-    snippet: { content: string; targetFile: string; notes: string[]; language: string };
-    clientId: string;
-}
+import { setupMcpPanel } from './mcp-panel.js';
 
 interface TimelineEvent {
     seq: number;
@@ -37,6 +33,7 @@ const els = {
 let csrfToken = '';
 let currentStatus: BridgeStatus | null = null;
 let actionNotice: string | null = null;
+let mcpPanel: ReturnType<typeof setupMcpPanel> | null = null;
 function showNotice(text: string): void {
     actionNotice = text;
     els.statusNotice.textContent = text;
@@ -61,8 +58,8 @@ async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     if (!response.ok) {
         let detail = `HTTP ${response.status}`;
         try {
-            const payload = (await response.json()) as { error?: string; fault?: { message?: string } };
-            detail = payload.fault?.message ?? payload.error ?? detail;
+            const payload = (await response.json()) as { error?: string; message?: string; fault?: { message?: string } };
+            detail = payload.fault?.message ?? payload.message ?? payload.error ?? detail;
         } catch {
             /* 非 JSON 错误 */
         }
@@ -164,6 +161,7 @@ async function refreshStatus(): Promise<void> {
     try {
         currentStatus = await api<BridgeStatus>('/api/v1/status');
         renderStatus();
+        await mcpPanel?.refresh();
     } catch (error) {
         els.statusNotice.textContent = `读取状态失败：${error instanceof Error ? error.message : String(error)}`;
     }
@@ -255,23 +253,6 @@ function wire(): void {
         els.screenshot.src = URL.createObjectURL(blob);
         els.screenshotWrap.classList.remove('hidden');
     });
-    on('btn-host', async () => {
-        const host = (document.getElementById('host-select') as HTMLSelectElement).value;
-        const transport = (document.getElementById('transport-select') as HTMLSelectElement).value;
-        const data = await api<HostSnippetResponse>(`/api/v1/hosts?host=${host}&transport=${transport}`);
-        els.hostSnippet.textContent = data.snippet.content;
-        els.hostTarget.textContent = `目标位置：${data.snippet.targetFile}　clientId=${data.clientId}`;
-        els.hostNotes.innerHTML = '';
-        for (const note of data.snippet.notes) {
-            const li = document.createElement('li');
-            li.textContent = note;
-            els.hostNotes.append(li);
-        }
-    });
-    on('btn-copy', async () => {
-        await navigator.clipboard.writeText(els.hostSnippet.textContent ?? '');
-        showNotice('配置已复制到剪贴板（含令牌，请勿粘贴到公开位置）。');
-    });
     on('btn-diag', async () => {
         const data = await api<Record<string, unknown>>('/api/v1/diagnostics');
         els.diag.textContent = JSON.stringify(data, null, 2);
@@ -290,6 +271,7 @@ async function boot(): Promise<void> {
         els.statusNotice.textContent = '无法建立网页会话。';
     }
     wire();
+    mcpPanel = setupMcpPanel(api);
     await refreshStatus();
     await loadReceipts();
     const source = new EventSource('/api/v1/events');

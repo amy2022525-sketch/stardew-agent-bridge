@@ -1,6 +1,6 @@
 # Stardew Agent Bridge
 
-> 0.1.0 源码预览。2026-10-22 复核：46 项 Node 测试、17 项隔离 C# 检查、17 项安装脚本检查通过；真实游戏中的移动、箱子存取与去重、制作、放置，以及 Web 接管已验证。钓鱼/战斗、完整消费与跨日流程、三个真实宿主仍有待验收项。完整结果见 [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md)，尚未发布稳定版 Release。
+> 0.1.0 源码预览。2026-10-23：Web 新增 MCP 连接面板，51 项 Node 测试和 11 项 MCP 浏览器检查通过。此前 17 项隔离 C# 检查、17 项安装脚本检查及部分真实游戏动作已有证据；钓鱼/战斗、完整消费与跨日流程、三个真实宿主仍有待验收项。完整结果见 [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md)，尚未发布稳定版 Release。
 
 让**任意本地 MCP Agent**（DSH、Codex CLI、Claude Code……）观察并操作真实的星露谷游戏：一个 SMAPI Mod + 一个常驻本机 Bridge + 一个 Web 控制台，共用同一套游戏能力与同一份动作账本。
 
@@ -77,7 +77,7 @@ SMAPI Mod（游戏主线程）                      ← 唯一执行者
    node scripts/smoke.mjs
    ```
 
-6. **接入你的 Agent 宿主**：在网页的「连接其他 Agent 宿主」卡片里选宿主与传输方式，复制配置片段；也可以命令行输出：
+6. **接入你的 Agent 宿主**：点击网页顶部的「MCP 连接」，选择 DSH、Codex、Claude Code 或其他 MCP 客户端，填写连接名称并生成配置。可复制或下载 JSON/TOML；「检测本机 MCP 通道」会执行真实握手、工具发现和只读状态查询。将配置导入 Agent，再让它调用 `stardew_status`，即可在网页的「客户端最近调用」中看到记录。也可以命令行输出：
 
    ```powershell
    node apps/server/dist/cli.js hosts --host codex --transport stdio
@@ -133,7 +133,7 @@ SMAPI Mod（游戏主线程）                      ← 唯一执行者
 
 ```powershell
 npm run build      # tsc -b + Web 类型检查 + esbuild
-npm test           # 46 个测试（契约 / 控制权 / MCP HTTP / 故障注入），使用模拟 Mod
+npm test           # 51 个测试（契约 / 控制权 / MCP HTTP / Web MCP / 故障注入），使用模拟 Mod
 npm run test:mod   # 17 项真实 C# 控制源码隔离检查（不是游戏实测）
 npm run test:installer # 17 项 Windows 安装与回滚检查
 npm run clean
@@ -148,7 +148,8 @@ npm run pack       # 生成 release\StardewAgentBridge-0.1.0\（含 CHECKSUMS.tx
 
 | 范围 | 状态 |
 | --- | --- |
-| 契约 / 控制权 / 账本去重 / MCP HTTP+stdio / 故障注入（模拟 Mod） | **已通过** 46/46 |
+| 契约 / 控制权 / 账本去重 / MCP HTTP+stdio / Web MCP / 故障注入（模拟 Mod） | **已通过** 51/51 |
+| Web MCP 连接面板（真实浏览器 + 隔离 Bridge） | **已通过** 11 项；配置、复制下载、HTTP/stdio 检测、调用记录和 390px 布局 |
 | Mod 编译（`dotnet build`，引用真实游戏 DLL） | **已通过** 0 警告 0 错误 |
 | Bridge + Web 实进程自检（`/health`、`/`、`/mcp`、`scripts/smoke.mjs`） | **已通过**（无游戏时的降级行为也已验证） |
 | **真实游戏内实机验收** | **部分通过**：正常加载、移动、选槽、箱子存取与去重、制作、放置、等待、失联收手与 Web 接管。完整矩阵见 [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md) |

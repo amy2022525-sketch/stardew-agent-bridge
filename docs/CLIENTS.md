@@ -9,7 +9,9 @@ node apps/server/dist/cli.js hosts --host <dsh|codex|claude-code> --transport <h
 node apps/server/dist/cli.js matrix        # 支持矩阵
 ```
 
-网页控制台的「连接其他 Agent 宿主」卡片做的是同一件事。
+网页顶部 **MCP 连接** 入口提供本机服务地址、配置生成、复制、下载与通道检测。选好 Agent、HTTP/stdio 和连接名称后生成配置；不同 Agent 使用不同名称。DSH、Codex 和 Claude Code 默认采用本机 stdio；「其他 MCP 客户端」提供常见的 mcpServers JSON 格式，也可按其内容填写 URL/Bearer 或本地进程设置。
+
+**检测本机 MCP 通道** 使用独立的网页检测身份完成真实 MCP 握手、工具发现及 `stardew_status` 只读查询。检测成功说明本机通道可用；把配置导入 Agent 后，还应由 Agent 自己调用一次工具。页面下方的「客户端最近调用」显示实际请求的客户端名称、传输和时间；网页检测记录不会混入其中，空闲客户端也不能据此断言持续在线。配置生成会复用同名连接的令牌，不会在重复点击时将其轮换。
 
 ## 0. 选择传输方式
 

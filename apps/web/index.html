@@ -14,6 +14,7 @@
             <span class="version" id="bridge-version">…</span>
         </div>
         <div class="topbar-actions">
+            <a class="button-link" href="#host-card">MCP 连接</a>
             <span class="pill" id="pause-pill">暂停状态未知</span>
             <button id="btn-refresh" type="button">刷新</button>
         </div>
@@ -24,6 +25,60 @@
             <h2>连接与状态</h2>
             <dl class="grid" id="status-grid"></dl>
             <p class="notice" id="status-notice"></p>
+        </section>
+
+        <section class="card" id="host-card" aria-labelledby="mcp-title">
+            <div class="card-heading">
+                <h2 id="mcp-title">MCP 连接</h2>
+                <span class="pill" id="mcp-summary">正在读取服务状态…</span>
+            </div>
+            <p class="hint">把星露谷工具接入你正在使用的 Agent。DSH、Codex、Claude Code 和其他支持 MCP 的程序均可使用。</p>
+            <div class="connection-address">
+                <label for="mcp-endpoint">MCP 地址</label>
+                <input id="mcp-endpoint" class="mono-input" type="text" readonly aria-label="MCP 服务地址" />
+                <button id="btn-copy-endpoint" type="button">复制地址</button>
+            </div>
+            <p class="hint">HTTP 连接使用 Bearer 鉴权；下方生成的配置已包含所需信息。</p>
+            <div class="connection-fields">
+                <label for="host-select">Agent 程序
+                    <select id="host-select">
+                        <option value="dsh">DSH</option>
+                        <option value="codex">Codex</option>
+                        <option value="claude-code">Claude Code</option>
+                        <option value="generic">其他 MCP 客户端</option>
+                    </select>
+                </label>
+                <label for="transport-select">连接方式
+                    <select id="transport-select">
+                        <option value="stdio">stdio（本机进程）</option>
+                        <option value="http">HTTP（地址 + 令牌）</option>
+                    </select>
+                </label>
+                <label for="mcp-client-id">连接名称
+                    <input id="mcp-client-id" type="text" value="dsh" maxlength="40" minlength="2" pattern="[A-Za-z0-9][A-Za-z0-9_-]{1,39}" required spellcheck="false" autocomplete="off" />
+                </label>
+            </div>
+            <p class="hint">多个 Agent 分别使用不同的连接名称，例如 dsh、codex、claude-code。</p>
+            <div class="actions">
+                <button id="btn-host" type="button" class="primary">生成配置</button>
+                <button id="btn-copy" type="button" disabled>复制配置</button>
+                <button id="btn-download-config" type="button" disabled>下载配置</button>
+                <button id="btn-check-mcp" type="button">检测本机 MCP 通道</button>
+            </div>
+            <p id="mcp-notice" class="notice" role="status" aria-live="polite"></p>
+            <p class="mono small" id="host-target">选择 Agent 程序后生成配置。</p>
+            <pre id="host-snippet" class="mono">尚未生成。</pre>
+            <ul id="host-notes" class="notes"></ul>
+            <ol class="connection-steps">
+                <li>生成并复制配置，在 Agent 程序的 MCP 设置中添加或导入。</li>
+                <li>让 Agent 调用 <code>stardew_status</code>，确认游戏状态。</li>
+                <li>在下方查看真实调用记录；载入单人存档后即可继续观察和游玩。</li>
+            </ol>
+            <p id="mcp-check-result" class="hint" aria-live="polite">尚未检测。本机检测会完成 MCP 握手、工具发现和只读状态查询；Agent 的实际接入情况以调用记录为准。</p>
+            <h3>客户端最近调用</h3>
+            <p class="hint">显示本次 Bridge 启动后收到的调用；空闲时不会持续发送心跳。</p>
+            <ul id="mcp-clients" class="mcp-clients"></ul>
+            <p id="mcp-clients-empty" class="hint">尚无 Agent 调用记录。导入配置后，让 Agent 读取一次状态。</p>
         </section>
 
         <section class="card" id="control-card">
@@ -58,31 +113,6 @@
         <section class="card" id="notes-card">
             <h2>进度笔记</h2>
             <pre id="notes-text" class="mono">（尚无进度笔记）</pre>
-        </section>
-
-        <section class="card" id="host-card">
-            <h2>连接其他 Agent 宿主</h2>
-            <p class="hint">生成的是“已包含令牌”的本机配置；令牌等价于密码，请勿提交到仓库。</p>
-            <div class="actions">
-                <label>宿主
-                    <select id="host-select">
-                        <option value="dsh">DSH</option>
-                        <option value="codex">Codex CLI</option>
-                        <option value="claude-code">Claude Code</option>
-                    </select>
-                </label>
-                <label>传输
-                    <select id="transport-select">
-                        <option value="http">HTTP（/mcp）</option>
-                        <option value="stdio">stdio 适配器</option>
-                    </select>
-                </label>
-                <button id="btn-host" type="button" class="primary">生成配置</button>
-                <button id="btn-copy" type="button">复制</button>
-            </div>
-            <p class="mono small" id="host-target"></p>
-            <pre id="host-snippet" class="mono">尚未生成。</pre>
-            <ul id="host-notes" class="notes"></ul>
         </section>
 
         <section class="card" id="diag-card">

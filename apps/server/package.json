@@ -9,6 +9,7 @@
     "stardew-agent-bridge": "./dist/cli.js"
   },
   "dependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
     "@modelcontextprotocol/server": "2.3.1",
     "@sab/contracts": "*",
     "@sab/control-core": "*",

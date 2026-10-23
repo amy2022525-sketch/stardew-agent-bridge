@@ -170,6 +170,9 @@ Mod 在自己的内存里记录已见 `actionId` 与参数指纹：
 | `GET /health` | 无 | `{ok, bridgeVersion, contractsSchemaVersion, modConnected, uptimeMs}` |
 | `POST /mcp`（及 `GET`/`DELETE` 会话） | Bearer 或网页会话 | MCP 通道；校验 `Origin`、`Host` |
 | `GET /api/v1/session` | 无（只写 Cookie） | 下发网页会话与 `csrfToken` |
+| `GET /api/v1/mcp` | 网页会话 | MCP 地址、工具数、最近客户端调用与本机通道检测结果；不返回令牌 |
+| `POST /api/v1/mcp/config` | 网页会话 + CSRF | `{host, transport, clientId}`；生成 JSON/TOML 配置，支持 generic 客户端；同名连接复用令牌 |
+| `POST /api/v1/mcp/check` | 网页会话 + CSRF | `{transport: "http"\|"stdio"}`；使用独立身份完成 MCP 初始化、工具发现与只读状态调用；不申请游戏控制权 |
 | `GET /api/v1/status` | Bearer 或网页会话 | 控制权、在途动作、未决动作、账本可写性 |
 | `GET /api/v1/events?since=<seq>` | 网页会话 | SSE：动作、控制权、连接事件 |
 | `GET /api/v1/receipts` / `GET /api/v1/receipt?id=` | 网页会话 | 动作回执列表 / 单条 |

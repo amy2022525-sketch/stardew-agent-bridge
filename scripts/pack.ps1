@@ -70,7 +70,7 @@ foreach ($doc in @('ACCEPTANCE.md', 'AGENT_GUIDE.md', 'CLIENTS.md', 'PROTOCOL.md
 @'
 启动（Windows，需 Node.js 22.5 或更高版本）：
   node server\bridge.mjs start
-然后打开 http://127.0.0.1:17655/ 查看控制台，并在“连接其他 Agent 宿主”里生成宿主配置。
+然后打开 http://127.0.0.1:17655/ 查看控制台，在“MCP 连接”里生成、复制或下载宿主配置，并检测 HTTP/stdio 通道。
 
 诊断：
   node server\bridge.mjs doctor

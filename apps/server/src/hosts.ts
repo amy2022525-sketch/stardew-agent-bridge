@@ -5,7 +5,7 @@
  * 写入前备份，写入内容不改动其他 MCP 服务器条目。
  */
 
-export type HostId = 'dsh' | 'codex' | 'claude-code';
+export type HostId = 'dsh' | 'codex' | 'claude-code' | 'generic';
 export type TransportMode = 'http' | 'stdio';
 
 export interface HostConfigInput {
@@ -37,7 +37,8 @@ export interface HostConfigSnippet {
 export const HOST_LABELS: Record<HostId, string> = {
     dsh: 'DSH（DeepSeek Harness）',
     codex: 'Codex CLI',
-    'claude-code': 'Claude Code'
+    'claude-code': 'Claude Code',
+    generic: '其他 MCP 客户端'
 };
 
 function jsonSnippet(value: unknown): string {
@@ -60,7 +61,7 @@ export function generateHostConfig(input: HostConfigInput): HostConfigSnippet {
             return {
                 host: 'dsh',
                 transport: 'http',
-                targetFile: 'DSH 设置 → MCP 连接器 → 导入 JSON（或连接器商店的"自定义 HTTP"）',
+                targetFile: 'DSH 侧栏 → MCP连接器 → 添加连接 → 导入 JSON',
                 language: 'json',
                 content: jsonSnippet({
                     mcpServers: {
@@ -81,7 +82,7 @@ export function generateHostConfig(input: HostConfigInput): HostConfigSnippet {
         return {
             host: 'dsh',
             transport: 'stdio',
-            targetFile: 'DSH 设置 → MCP 连接器 → 导入 JSON（自定义 stdio）',
+            targetFile: 'DSH 侧栏 → MCP连接器 → 添加连接 → 导入 JSON',
             language: 'json',
             content: jsonSnippet({
                 mcpServers: {
@@ -136,12 +137,12 @@ export function generateHostConfig(input: HostConfigInput): HostConfigSnippet {
         };
     }
 
-    // claude-code
+    // Claude Code 和采用 mcpServers JSON 配置的其他客户端。
     if (input.transport === 'http') {
         return {
-            host: 'claude-code',
+            host: input.host,
             transport: 'http',
-            targetFile: '项目根目录 .mcp.json（项目级）或 claude mcp add 命令',
+            targetFile: input.host === 'generic' ? 'Agent 程序的 MCP 设置 → 导入 JSON，或填写 URL 和 Bearer 令牌' : '项目根目录 .mcp.json（项目级）或 claude mcp add 命令',
             language: 'json',
             content: jsonSnippet({
                 mcpServers: {
@@ -152,13 +153,13 @@ export function generateHostConfig(input: HostConfigInput): HostConfigSnippet {
                     }
                 }
             }),
-            notes: [...notes, '等价 CLI：claude mcp add --transport http stardew <url> --header "Authorization: Bearer <token>"']
+            notes: [...notes, input.host === 'generic' ? '此 JSON 使用常见的 mcpServers 格式；仅支持表单的客户端可从中提取 URL 和 Authorization 请求头。' : '等价 CLI：claude mcp add --transport http stardew <url> --header "Authorization: Bearer <token>"']
         };
     }
     return {
-        host: 'claude-code',
+        host: input.host,
         transport: 'stdio',
-        targetFile: '项目根目录 .mcp.json（项目级）',
+        targetFile: input.host === 'generic' ? 'Agent 程序的 MCP 设置 → 本地 stdio 服务' : '项目根目录 .mcp.json（项目级）',
         language: 'json',
         content: jsonSnippet({
             mcpServers: {
@@ -178,7 +179,8 @@ export function generateHostConfig(input: HostConfigInput): HostConfigSnippet {
 }
 
 export const HOST_SUPPORT_MATRIX: { host: string; http: string; stdio: string; note: string }[] = [
-    { host: 'DSH', http: '配置模板', stdio: '配置模板', note: '真实宿主待验收；导入入口按安装版本核对' },
+    { host: 'DSH', http: '配置模板', stdio: '已验收只读调用', note: 'Desktop 0.2.0-rc.2 / MCP连接器 0.2.70；完整游戏短任务待补齐' },
     { host: 'Codex CLI', http: '配置模板', stdio: '配置模板', note: '真实宿主待验收；支持取决于安装版本' },
-    { host: 'Claude Code', http: '配置模板', stdio: '配置模板', note: '真实宿主待验收；.mcp.json 或 claude mcp add' }
+    { host: 'Claude Code', http: '配置模板', stdio: '配置模板', note: '真实宿主待验收；.mcp.json 或 claude mcp add' },
+    { host: '其他 MCP 客户端', http: '通用 JSON / URL + Bearer', stdio: '通用 JSON / 本地进程', note: '以客户端实际支持的配置格式为准' }
 ];

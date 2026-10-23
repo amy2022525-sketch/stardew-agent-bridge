@@ -22,6 +22,7 @@ import {
     BridgeError,
     CONTRACTS_SCHEMA_VERSION,
     MAX_REQUEST_BYTES,
+    TOOLS,
     makeFault,
     type ClientPresence
 } from '@sab/contracts';
@@ -44,6 +45,7 @@ import { Logger } from './logger.js';
 import { dataPaths, ensureDirs, resolveDataDir, resolveStdioAdapter, type DataPaths } from './paths.js';
 import { serveStatic } from './static.js';
 import { redactDiagnostics } from './redact.js';
+import { checkMcpConnection, MCP_CHECK_CLIENT_ID, validMcpClientId, type McpConnectionCheck } from './mcp-connections.js';
 
 export interface BridgeOptions {
     dataDir?: string;
@@ -79,6 +81,8 @@ export class Bridge {
     private readonly sessionToken: string;
     private readonly csrfToken: string;
     private boundPort = 0;
+    private mcpCheckRunning = false;
+    private readonly mcpChecks: Partial<Record<TransportMode, McpConnectionCheck>> = {};
 
     constructor(options: BridgeOptions = {}) {
         const rootDir = resolveDataDir(options.dataDir);
@@ -330,7 +334,13 @@ export class Bridge {
                 const id = randomUUID();
                 const server = createToolServer({
                     serverInfo: { name: 'stardew-agent-bridge', version: BRIDGE_VERSION },
-                    executor: this.actions,
+                    executor: {
+                        executeTool: (toolName, args, ctx) => {
+                            this.registry.touch(ctx.clientId, ctx.clientName, ctx.transport);
+                            this.registry.countCall(ctx.clientId);
+                            return this.actions.executeTool(toolName, args, ctx);
+                        }
+                    },
                     resolveContext: () => ({ clientId: client.clientId, clientName: client.clientName, transport: 'http' })
                 });
                 const transport = new WebStandardStreamableHTTPServerTransport({
@@ -507,14 +517,63 @@ export class Bridge {
             return;
         }
 
-        if (method === 'GET' && pathname === '/api/v1/hosts') {
-            const host = (url.searchParams.get('host') ?? 'dsh') as HostId;
-            const transport = (url.searchParams.get('transport') ?? 'http') as TransportMode;
-            if (!HOST_LABELS[host]) {
+        if (method === 'GET' && pathname === '/api/v1/mcp') {
+            sendJson(res, 200, {
+                url: `http://127.0.0.1:${this.boundPort}/mcp`, toolCount: TOOLS.length,
+                clients: this.presence().filter(client => (client.transport === 'http' || client.transport === 'stdio') && client.clientId !== MCP_CHECK_CLIENT_ID && client.toolCalls > 0),
+                checks: this.mcpChecks
+            });
+            return;
+        }
+
+        if (method === 'POST' && pathname === '/api/v1/mcp/check') {
+            const body = await this.readJsonBody(req);
+            if (body.transport !== 'http' && body.transport !== 'stdio') {
+                sendJson(res, 400, makeFault('INVALID_ARGUMENT', '请选择 HTTP 或 stdio。'));
+                return;
+            }
+            if (this.mcpCheckRunning) {
+                sendJson(res, 409, { error: '已有连接检测正在进行，请稍后再试。' });
+                return;
+            }
+            this.mcpCheckRunning = true;
+            const abort = new AbortController();
+            const timer = setTimeout(() => abort.abort(), 10_000);
+            res.once('close', () => { if (!res.writableFinished) abort.abort(); });
+            try {
+                const credential = this.auth.issue(MCP_CHECK_CLIENT_ID, 'Web MCP 连接检测');
+                const result = await checkMcpConnection({
+                    transport: body.transport, url: `http://127.0.0.1:${this.boundPort}/mcp`, token: credential.token,
+                    dataDir: this.paths.root, adapterPath: resolveStdioAdapter(), signal: abort.signal
+                });
+                this.mcpChecks[body.transport] = result;
+                sendJson(res, 200, { ...result, modConnected: this.mod.connected, saveLoaded: this.mod.hello?.saveLoaded ?? false });
+            } catch {
+                sendJson(res, 502, { error: 'MCP 连接检测未通过。请确认 Bridge 和本机 stdio 适配器可用后重试。' });
+            } finally {
+                clearTimeout(timer);
+                this.mcpCheckRunning = false;
+            }
+            return;
+        }
+
+        if ((method === 'GET' && pathname === '/api/v1/hosts') || (method === 'POST' && pathname === '/api/v1/mcp/config')) {
+            const body = method === 'POST' ? await this.readJsonBody(req) : Object.fromEntries(url.searchParams);
+            const host = (body.host ?? 'dsh') as HostId;
+            const transport = (body.transport ?? 'http') as TransportMode;
+            if (!Object.hasOwn(HOST_LABELS, host)) {
                 sendJson(res, 400, makeFault('INVALID_ARGUMENT', `未知宿主 ${host}。`));
                 return;
             }
-            const clientId = url.searchParams.get('clientId') ?? host;
+            if (transport !== 'http' && transport !== 'stdio') {
+                sendJson(res, 400, makeFault('INVALID_ARGUMENT', '请选择 HTTP 或 stdio。'));
+                return;
+            }
+            const clientId = body.clientId ?? (host === 'generic' ? 'agent' : host);
+            if (!validMcpClientId(clientId)) {
+                sendJson(res, 400, makeFault('INVALID_ARGUMENT', '连接名称需 2–40 位字母、数字、下划线或横线，以字母或数字开头；请避开系统保留名称。'));
+                return;
+            }
             const credential = this.auth.issue(clientId, HOST_LABELS[host]);
             const snippet = generateHostConfig({
                 host,
@@ -584,7 +643,7 @@ export class Bridge {
         if (method === 'POST' && pathname === '/api/v1/clients') {
             const body = await this.readJsonBody(req);
             const clientId = typeof body.clientId === 'string' ? body.clientId : null;
-            if (!clientId || !/^[A-Za-z0-9_-]{2,40}$/.test(clientId)) {
+            if (!validMcpClientId(clientId)) {
                 sendJson(res, 400, makeFault('INVALID_ARGUMENT', 'clientId 需 2–40 位字母数字下划线横线。'));
                 return;
             }

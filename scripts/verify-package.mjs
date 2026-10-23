@@ -89,6 +89,27 @@ try {
         assert.ok((await response.text()).length > 0);
     }
     pass('bundled Web assets from unrelated cwd');
+    const sessionResponse = await fetch(url + '/api/v1/session');
+    const cookie = sessionResponse.headers.get('set-cookie').split(';')[0];
+    const { csrfToken } = await sessionResponse.json();
+    const webHeaders = { cookie, origin: url, 'content-type': 'application/json', 'x-sab-csrf': csrfToken };
+    const connectionInfo = await (await fetch(url + '/api/v1/mcp', { headers: webHeaders })).json();
+    assert.equal(connectionInfo.url, url + '/mcp');
+    assert.equal(connectionInfo.toolCount, 28);
+    assert.deepEqual(connectionInfo.clients, []);
+    pass('portable Web MCP metadata');
+    for (const transport of ['http', 'stdio']) {
+        const response = await fetch(url + '/api/v1/mcp/check', {
+            method: 'POST', headers: webHeaders, body: JSON.stringify({ transport }), signal: AbortSignal.timeout(15000)
+        });
+        assert.equal(response.status, 200, `portable ${transport} Web check must succeed`);
+        const result = await response.json();
+        assert.equal(result.ok, true);
+        assert.equal(result.transport, transport);
+        assert.equal(result.toolCount, 28);
+        assert.equal(result.modConnected, false);
+        pass(`portable Web MCP ${transport} real channel check`);
+    }
     const credentials = JSON.parse(readFileSync(path.join(data, 'credentials.json'), 'utf8'));
     http = new Client({ name: 'portable-http-check', version: '1.0.0' });
     await http.connect(new StreamableHTTPClientTransport(new URL(url + '/mcp'), { authProvider: { token: async () => credentials.clients.portable.token } }));

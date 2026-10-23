@@ -1,6 +1,6 @@
 # Stardew Agent Bridge
 
-> Source preview (0.1.0). Review on 2026-10-22: 46 Node tests, 17 isolated C# checks, and 17 Windows installer checks passed. Real-game movement, container transfers/idempotency, crafting, placement, and Web takeover have evidence. Fishing/combat, the full transaction/day-transition matrix, and actual DSH/Codex/Claude Code host runs remain incomplete. See [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md). No stable release has been published.
+> Source preview (0.1.0). Updated on 2026-10-23: the Web console now includes an MCP connection panel; 51 Node tests and 11 browser checks for this feature passed. Earlier verification includes 17 isolated C# checks, 17 Windows installer checks, and selected real-game actions. Fishing/combat, the full transaction/day-transition matrix, and complete tasks through DSH/Codex/Claude Code remain incomplete. See [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md). No stable release has been published.
 
 Let any local MCP-capable agent (DSH, Codex CLI, Claude Code, …) observe and play Stardew Valley through a SMAPI mod, a resident local bridge and a web console — one shared game capability set, one shared action ledger.
 
@@ -45,6 +45,8 @@ node scripts/smoke.mjs   # real MCP round-trip: tools/list + status + snapshot
 node apps/server/dist/cli.js hosts --host codex --transport stdio   # host config snippet
 ```
 
+In the Web console, select **MCP 连接** (MCP connection), choose DSH, Codex, Claude Code or a generic MCP client, and generate a configuration. Copy or download it, then import it into your agent. Each agent should use a distinct connection name. The panel can test HTTP and stdio by performing a real MCP handshake, discovering 28 tools and calling the read-only `stardew_status` tool. This local check is separate from agent activity: ask your agent to call a tool to see its actual call record in the panel.
+
 Per-host instructions: [docs/CLIENTS.md](docs/CLIENTS.md). Protocol and error model: [docs/PROTOCOL.md](docs/PROTOCOL.md). Troubleshooting: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
 ## Guarantees
@@ -62,7 +64,9 @@ Per-host instructions: [docs/CLIENTS.md](docs/CLIENTS.md). Protocol and error mo
 
 | Scope | Status |
 | --- | --- |
-| Contracts, control, ledger dedup, MCP HTTP+stdio, fault injection against a mock mod | **passing**, 46/46 |
+| Contracts, control, ledger dedup, MCP HTTP+stdio, Web MCP, fault injection against a mock mod | **passing**, 51/51 |
+| Web MCP panel: configuration, copy/download, real channel checks, client records, responsive layout | **passing**, 11 browser checks; no page errors |
+| Portable package outside the repository, including Web HTTP/stdio MCP checks | **passing**, 13 checks |
 | Isolated C# source checks / Windows installer checks | **passing**, 17 / 17 respectively |
 | Mod compiles against real game DLLs | **passing**, 0 warnings / 0 errors |
 | Live bridge + web + real MCP self-check | **passing** (including the no-game degradation path) |
