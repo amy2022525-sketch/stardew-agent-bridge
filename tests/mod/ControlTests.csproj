@@ -10,5 +10,9 @@
     <Compile Include="../../mods/StardewAgentBridge/ControlAuthority.cs" Link="ControlAuthority.cs" />
     <Compile Include="../../mods/StardewAgentBridge/ActionCoordinator.cs" Link="ActionCoordinator.cs" />
     <Compile Include="../../mods/StardewAgentBridge/Protocol.cs" Link="Protocol.cs" />
+    <Compile Include="../../mods/StardewAgentBridge/PlatformPaths.cs" Link="PlatformPaths.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../fixtures/platform-paths.json" Link="fixtures/platform-paths.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

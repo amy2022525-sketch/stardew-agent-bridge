@@ -176,3 +176,16 @@ footer { text-align: center; color: var(--muted); font-size: 12px; padding: 18px
     .connection-address input { flex-basis: 100%; }
     .mcp-client { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* 窄屏（含 390px 手机宽度）：单列排布，长路径横向滚动而不是撑破页面。 */
+@media (max-width: 420px) {
+    .topbar { flex-wrap: wrap; gap: 8px; }
+    .topbar-actions { flex-wrap: wrap; }
+    .grid { grid-template-columns: minmax(0, 1fr); }
+    .grid dt { margin-top: 6px; }
+    .actions { flex-wrap: wrap; }
+    .actions button { flex: 1 1 140px; }
+    .timeline li { grid-template-columns: minmax(0, 1fr); }
+    pre.mono, .mono-input { overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+    .connection-address { flex-direction: column; align-items: stretch; }
+}

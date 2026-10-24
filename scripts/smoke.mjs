@@ -10,13 +10,24 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import { currentPlatformId, resolveDataRoot } from '@sab/platform';
 
 function arg(name, fallback) {
     const index = process.argv.indexOf(`--${name}`);
     return index >= 0 && process.argv[index + 1] ? process.argv[index + 1] : fallback;
 }
 
-const dataDir = arg('data-dir', process.env.SAB_HOME ?? path.join(process.env.LOCALAPPDATA ?? path.join(os.homedir(), 'AppData', 'Local'), 'StardewAgentBridge'));
+/** 与 Bridge 共用同一套数据根解析规则：Windows 走 LOCALAPPDATA，Linux 走 XDG。 */
+const explicit = arg('data-dir', undefined);
+const dataRoot = resolveDataRoot({
+    explicit,
+    env: process.env,
+    platform: currentPlatformId(),
+    homeDir: os.homedir(),
+    cwd: process.cwd(),
+    requireAbsoluteExplicit: Boolean(explicit)
+});
+const dataDir = dataRoot.path;
 const clientId = arg('client', 'smoke');
 let url = arg('url', null);
 

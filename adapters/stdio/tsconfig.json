@@ -5,5 +5,9 @@
     "outDir": "dist"
   },
   "include": ["src/**/*.ts"],
-  "references": [{ "path": "../../packages/contracts" }, { "path": "../../packages/mcp" }]
+  "references": [
+    { "path": "../../packages/contracts" },
+    { "path": "../../packages/platform" },
+    { "path": "../../packages/mcp" }
+  ]
 }

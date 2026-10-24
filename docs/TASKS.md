@@ -247,3 +247,20 @@
 
 当前结论与未完成事项：FINAL_TEST_REPORT.md；首次实现记录保留于 HANDOVER_REPORT.md。实现存在不等于每个玩法或异常分支均已验收。
 
+
+## 9. Linux 首版（LNX-001 … LNX-020）
+
+2026-10-24 最新状态：已完成 Windows/WSL 构建、自动化测试与部分包验证，
+真实 Linux 游戏、图形桌面、具体 Agent 短任务和完整发行包仍待验收。实际命令与结果见
+[LINUX_VALIDATION_REPORT.md](../LINUX_VALIDATION_REPORT.md)。下表保留其他 AI 最初完成编写时的交付快照，
+其中“未运行”是当时状态，不是当前验证结论。逐任务的文件映射、开放问题与接手顺序见
+[LINUX_HANDOVER_REPORT.md](../LINUX_HANDOVER_REPORT.md)；验收矩阵（P/S/I/K/R/G）见
+[docs/LINUX_ACCEPTANCE.md](LINUX_ACCEPTANCE.md)；平台差异见 [docs/PLATFORM_MATRIX.md](PLATFORM_MATRIX.md)。
+
+| 里程碑 | 任务 | 状态 |
+| --- | --- | --- |
+| M0–M1 | LNX-001 … LNX-005 | 编写完成；未运行构建/测试 |
+| M2 | LNX-006 … LNX-010 | 编写完成；未运行构建/测试 |
+| M3 | LNX-011 … LNX-014 | 编写完成；未运行构建/测试 |
+| M4 | LNX-015 … LNX-017 | 编写完成；未运行构建/测试 |
+| M5–M6 | LNX-018 … LNX-020 | 编写完成；未运行构建/测试 |

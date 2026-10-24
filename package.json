@@ -6,7 +6,7 @@
   "license": "MIT",
   "type": "module",
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=22.13.0"
   },
   "workspaces": [
     "packages/*",
@@ -18,17 +18,20 @@
   "scripts": {
     "clean": "node scripts/clean.mjs",
     "build": "node scripts/build.mjs",
-    "build:mod": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-mod.ps1",
+    "build:mod": "node scripts/build-mod.mjs",
     "typecheck": "node scripts/build.mjs --check-only",
     "test": "node scripts/test.mjs",
     "test:mod": "dotnet run --project tests/mod/ControlTests.csproj",
-    "test:installer": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/install-rollback.ps1",
+    "test:installer": "node scripts/test-installer.mjs",
     "test:unit": "node --test \"tests/dist/**/*.test.js\"",
     "start": "node apps/server/dist/cli.js start",
+    "launch": "node apps/server/dist/cli.js launch",
     "doctor": "node apps/server/dist/cli.js doctor",
-    "pack": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/pack.ps1",
-    "install:mod": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-mod.ps1",
-    "rollback:mod": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/rollback-mod.ps1"
+    "pack": "node scripts/pack.mjs",
+    "verify:package": "node scripts/verify-package.mjs",
+    "install:mod": "node scripts/install-mod.mjs",
+    "rollback:mod": "node scripts/rollback-mod.mjs",
+    "desktop": "node scripts/linux/desktop-entry.mjs"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.3.1",
@@ -43,4 +46,3 @@
     "ws": "8.22.0"
   }
 }
-

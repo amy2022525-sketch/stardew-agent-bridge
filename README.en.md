@@ -28,7 +28,7 @@ SMAPI mod (game main thread)  ← the only executor
 
 ## Quick start (Windows, single-player)
 
-Prerequisites: Stardew Valley 1.6.15 with SMAPI 4.5.2, Node.js ≥ 22.5, .NET SDK 10 (source build and isolated checks; the mod targets net6.0).
+Prerequisites: Stardew Valley 1.6.15 with SMAPI 4.5.2, Node.js ≥ 22.13.0, .NET SDK 10 (source build and isolated checks; the mod targets net6.0).
 
 ```powershell
 npm ci
@@ -46,6 +46,21 @@ node apps/server/dist/cli.js hosts --host codex --transport stdio   # host confi
 ```
 
 In the Web console, select **MCP 连接** (MCP connection), choose DSH, Codex, Claude Code or a generic MCP client, and generate a configuration. Copy or download it, then import it into your agent. Each agent should use a distinct connection name. The panel can test HTTP and stdio by performing a real MCP handshake, discovering 28 tools and calling the read-only `stardew_status` tool. This local check is separate from agent activity: ask your agent to call a tool to see its actual call record in the panel.
+
+### Linux source preview (initial no-game verification completed)
+
+Linux reuses the same business core; only the host integration differs: the package ships its own Node runtime, the data root follows the XDG spec, mod install/rollback are transactional MJS scripts, and the menu entry is a `.desktop` file.
+
+```bash
+npm ci && npm run build
+GAME="/home/$USER/.local/share/Steam/steamapps/common/Stardew Valley"
+npm run build:mod -- --game-path "$GAME"
+node apps/server/dist/cli.js start &      # packaged binary: bin/stardew-agent-bridge start
+npm run install:mod -- --game-path "$GAME"
+npm run doctor
+```
+
+See [docs/LINUX_INSTALL.md](docs/LINUX_INSTALL.md), [docs/LINUX_DEVELOPMENT.md](docs/LINUX_DEVELOPMENT.md) and [docs/PLATFORM_MATRIX.md](docs/PLATFORM_MATRIX.md). Initial Ubuntu 24.04 / WSL2 verification passed: 136 Node tests, 20 installer/recovery cases and 19 portable no-game checks. Native Linux gameplay, graphical-browser interaction, real agent tasks and the final full package remain unverified. See [LINUX_VALIDATION_REPORT.md](LINUX_VALIDATION_REPORT.md); this source update is not a stable Linux binary release.
 
 Per-host instructions: [docs/CLIENTS.md](docs/CLIENTS.md). Protocol and error model: [docs/PROTOCOL.md](docs/PROTOCOL.md). Troubleshooting: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
@@ -69,6 +84,7 @@ Per-host instructions: [docs/CLIENTS.md](docs/CLIENTS.md). Protocol and error mo
 | Portable package outside the repository, including Web HTTP/stdio MCP checks | **passing**, 13 checks |
 | Isolated C# source checks / Windows installer checks | **passing**, 17 / 17 respectively |
 | Mod compiles against real game DLLs | **passing**, 0 warnings / 0 errors |
+| Linux source preview | WSL2 build, 136 Node tests, 20 installer cases and 19 no-game package checks passed; native gameplay and the final full package remain pending |
 | Live bridge + web + real MCP self-check | **passing** (including the no-game degradation path) |
 | Real-game movement, container transfers and duplicate replay, crafting, placement | **passing for the tested cases**; see [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md) |
 | Bridge crash while waiting / Web console | Self-release observed / 9 browser checks passed |

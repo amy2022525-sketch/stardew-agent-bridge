@@ -97,7 +97,14 @@ if ($forbidden) {
 
 Write-Host '[pack] 生成 CHECKSUMS.txt…'
 $lines = Get-ChildItem $out -Recurse -File | Sort-Object FullName | ForEach-Object {
-    $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+    $stream = [System.IO.File]::OpenRead($_.FullName)
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = [System.BitConverter]::ToString($sha256.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
+    } finally {
+        $stream.Dispose()
+        $sha256.Dispose()
+    }
     $relative = $_.FullName.Substring($out.Length + 1) -replace '\\', '/'
     "$hash  $relative"
 }

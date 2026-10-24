@@ -21,6 +21,7 @@ public sealed class ModEntry : Mod
 {
     private BridgeServer? server;
     private ModConfig config = new();
+    private PlatformPaths.DataRootResult dataRoot = new();
     private readonly ControlAuthority control = new();
     private ActionCoordinator actions = null!;
     private readonly Observations observations = new();
@@ -36,6 +37,10 @@ public sealed class ModEntry : Mod
     public override void Entry(IModHelper helper)
     {
         config = helper.ReadConfig<ModConfig>();
+
+        // 数据根规则与 Node 侧完全一致（PlatformPaths 与 packages/platform/src/data-root.ts 对应）。
+        dataRoot = PlatformPaths.ResolveForProcess(config.DataDirectory, requireAbsoluteExplicit: true);
+        LogDataRoot();
 
         actions = new ActionCoordinator(control, Decorate);
         actions.OnError = error => Monitor.Log($"游戏动作失败：{error}", LogLevel.Error);
@@ -71,16 +76,40 @@ public sealed class ModEntry : Mod
     // 凭据
     // ---------------------------------------------------------------------
 
-    private static string DataDir()
-    {
-        var overridden = Environment.GetEnvironmentVariable("SAB_HOME");
-        if (!string.IsNullOrWhiteSpace(overridden)) return overridden;
-        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        if (string.IsNullOrWhiteSpace(local)) local = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "AppData", "Local");
-        return Path.Combine(local, "StardewAgentBridge");
-    }
+    private string DataDir() => dataRoot.Ok ? dataRoot.Path : string.Empty;
 
-    private static string CredentialsPath() => Path.Combine(DataDir(), "credentials.json");
+    private string CredentialsPath() => Path.Combine(DataDir(), "credentials.json");
+
+    /// <summary>把解析后的数据根与来源打进日志：排障时不需要猜环境变量继承关系。</summary>
+    private void LogDataRoot()
+    {
+        if (!dataRoot.Ok)
+        {
+            Monitor.Log(
+                $"数据根无效（{dataRoot.ErrorCode}）：{dataRoot.ErrorMessage}",
+                LogLevel.Error);
+            Monitor.Log(
+                "请在 Mod 配置 config.json 里用绝对路径设置 DataDirectory，或设置绝对路径的 SAB_HOME 环境变量。",
+                LogLevel.Error);
+            return;
+        }
+        Monitor.Log($"数据根：{dataRoot.Path}（来源 {dataRoot.Source}，平台 {dataRoot.Platform}）", LogLevel.Trace);
+        if (dataRoot.Source == "default")
+        {
+            Monitor.Log(
+                "提示：当前使用默认数据根。通过 Steam 启动时不会继承终端环境变量；若常驻 Bridge 用的是别的目录，" +
+                    "请用安装器写入 DataDirectory，或让两者都使用默认目录。",
+                LogLevel.Trace);
+        }
+        var legacy = PlatformPaths.LegacyLinuxRoot(PlatformPaths.HomeDirectory());
+        if (dataRoot.Platform == "linux" && legacy != null && legacy != dataRoot.Path && Directory.Exists(legacy))
+        {
+            Monitor.Log(
+                $"发现旧版数据目录 {legacy}。本版默认使用 {dataRoot.Path}；如需沿用旧数据请显式设置绝对路径的 SAB_HOME，" +
+                    "本程序不会自动合并或删除任何一份凭据与账本。",
+                LogLevel.Warn);
+        }
+    }
 
     // 令牌来自受保护的本机凭据文件；文件更新后（轮换令牌）无需重启游戏。
     private string? ReadModToken()
@@ -459,11 +488,17 @@ public sealed class ModEntry : Mod
     }
 }
 
-/// <summary>Mod 配置：端口、热键、失联阈值与每步暂停策略。</summary>
+/// <summary>Mod 配置：端口、热键、失联阈值、每步暂停策略与数据目录。</summary>
 public sealed class ModConfig
 {
     public int Port { get; set; } = 17654;
     public SButton StopHotkey { get; set; } = SButton.F9;
     public double LinkTimeoutSeconds { get; set; } = 5;
     public bool PauseAfterEachStep { get; set; } = true;
+
+    /// <summary>
+    /// 数据根绝对路径（安装器写入）。为空时按 PlatformPaths 的规则解析：
+    /// 先看 SAB_HOME，再按平台默认目录。相对值会被拒绝并给出明确错误，不做猜测。
+    /// </summary>
+    public string? DataDirectory { get; set; }
 }

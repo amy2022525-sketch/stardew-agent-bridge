@@ -117,3 +117,65 @@ stdio 变体把 `type` 换成 `"stdio"` 并给 `command`/`args`/`env`（同 Code
 | `GAME_UNAVAILABLE` | Mod 未连接：游戏没走 SMAPI 启动、Mod 未安装、或存档未加载 |
 | `CONTROL_REQUIRED` | 该 Agent 身份没有控制会话；先由它调用 `stardew_session start` |
 | 写操作总 `CONTROL_EXPIRED` | 刚才发生过接管/断线/换存档；重新 `stardew_session start` 并重新观察 |
+
+## 7. 宿主短任务（接手后按此顺序做）
+
+验收一个宿主是否真的可用，最短路径是"读 → 控 → 写 → 释放"四步，不用等完整游玩流程：
+
+| 步骤 | 让宿主做的事 | 通过标准 |
+| --- | --- | --- |
+| 1 读 | 调用 `stardew_status` | 返回 Mod 连接状态、版本、控制权，无 `isError` |
+| 2 观察 | 调用 `stardew_snapshot` | 有存档时返回真实地图/角色；无存档时返回明确错误码（不是空对象） |
+| 3 控 | 调用 `stardew_session`（`operation: start`） | 拿到 `controlSessionId` 与 `epoch` |
+| 4 写 | 调用 `stardew_move` 走一格再 `stardew_wait` | 位置变化与回执一致，网页时间线出现记录 |
+| 5 释放 | 调用 `stardew_session`（`operation: end`） | 之后旧 `epoch` 的写请求被拒（`CONTROL_EXPIRED`） |
+
+出现 `unknown` / `effectKnown=false` 时：先 `stardew_status` 或原 `actionId` 查询，**不要**换新 ID 重放。
+
+## 8. 配置模板（复制即用）
+
+HTTP（推荐，多客户端共用同一 Bridge）：
+
+```json
+{
+  "mcpServers": {
+    "stardew": {
+      "type": "http",
+      "url": "http://127.0.0.1:17655/mcp",
+      "headers": { "Authorization": "Bearer <客户端令牌>" }
+    }
+  }
+}
+```
+
+stdio（宿主只支持子进程；令牌从数据根读取，不写进配置）：
+
+```json
+{
+  "mcpServers": {
+    "stardew": {
+      "command": "<包根>/runtime/node",
+      "args": ["<包根>/server/stdio-adapter.mjs"],
+      "env": { "SAB_CLIENT_ID": "dsh" }
+    }
+  }
+}
+```
+
+源码树里开发时，`command` 用 `node`，`args` 用 `apps/server/dist/cli.js` 同目录的 `stdio-adapter`：
+`node <仓库>/adapters/stdio/dist/index.js`。用 `node apps/server/dist/cli.js hosts --host <宿主> --transport <http|stdio>`
+生成与当前机器路径一致的模板，避免手抄路径出错。
+
+## 9. 宿主兼容矩阵
+
+| 宿主 | 传输 | 状态 | 备注 |
+| --- | --- | --- | --- |
+| DSH（MCP 连接器） | stdio | 已实测（Windows，0.2.0-rc.2） | 28 工具、`stardew_status`、标题页 `NO_SAVE_LOADED` |
+| DSH（MCP 连接器） | HTTP | 待验证 | 令牌 + 地址方式，建议优先验证复用与接管 |
+| Codex CLI | stdio / HTTP | 模板已交付，待验证 | 配置片段见 §2 |
+| Claude Code | stdio / HTTP | 模板已交付，待验证 | 配置片段见 §3 |
+| 其他 MCP 客户端 | HTTP | 通用模板可用，待验证 | 需要支持 Bearer 头或可用 stdio |
+
+Linux 上的宿主接入与 Windows 完全同构（同样的 28 个工具、同样的错误码），差异只是包内路径与数据根：
+见 [LINUX_INSTALL.md](LINUX_INSTALL.md) 与 [PLATFORM_MATRIX.md](PLATFORM_MATRIX.md)。
+本表"待验证"的行必须由原协作者在真实宿主上执行 §7 的短任务后才能改为通过。

@@ -1,0 +1,242 @@
+{
+  "schemaVersion": 1,
+  "notes": [
+    "Node 与 Mod 共用的数据根规则契约。任何一侧改规则都必须同时改这里，并让两侧测试都通过。",
+    "parties 表示该用例必须由哪一侧实现验证：js = packages/platform 的 resolveDataRoot，cs = mods/StardewAgentBridge/PlatformPaths。",
+    "Mod 永远要求显式 DataDirectory 为绝对路径（requireAbsoluteExplicit=true），因此相对路径的 cwd 解析只由 js 侧验证。",
+    "路径分隔符按目标平台语义：linux 用 /，win32 用 \\\\。"
+  ],
+  "cases": [
+    {
+      "name": "linux-default-from-home",
+      "parties": ["js", "cs"],
+      "platform": "linux",
+      "explicit": null,
+      "env": {},
+      "homeDir": "/home/player",
+      "cwd": "/opt/app",
+      "requireAbsoluteExplicit": true,
+      "expect": { "ok": true, "path": "/home/player/.local/share/StardewAgentBridge", "source": "default" }
+    },
+    {
+      "name": "linux-xdg-data-home",
+      "parties": ["js", "cs"],
+      "platform": "linux",
+      "explicit": null,
+      "env": { "XDG_DATA_HOME": "/data/xdg" },
+      "homeDir": "/home/player",
+      "cwd": "/opt/app",
+      "requireAbsoluteExplicit": true,
+      "expect": { "ok": true, "path": "/data/xdg/StardewAgentBridge", "source": "XDG_DATA_HOME" }
+    },
+    {
+      "name": "linux-xdg-trailing-slash",
+      "parties": ["js", "cs"],
+      "platform": "linux",
+      "explicit": null,
+      "env": { "XDG_DATA_HOME": "/data/xdg/" },
+      "homeDir": "/home/player",
+      "cwd": "/opt/app",
+      "requireAbsoluteExplicit": true,
+      "expect": { "ok": true, "path": "/data/xdg/StardewAgentBridge", "source": "XDG_DATA_HOME" }
+    },
+    {
+      "name": "linux-xdg-with-dot-segments",
+      "parties": ["js", "cs"],
+      "platform": "linux",
+      "explicit": null,
+      "env": { "XDG_DATA_HOME": "/data/./xdg/../xdg2" },
+      "homeDir": "/home/player",
+      "cwd": "/opt/app",
+      "requireAbsoluteExplicit": true,
+      "expect": { "ok": true, "path": "/data/xdg2/StardewAgentBridge", "source": "XDG_DATA_HOME" }
+    },
+    {
+      "name": "linux-relative-xdg-falls-back",
+      "parties": ["js", "cs"],
+      "platform": "linux",
+      "explicit": null,
+      "env": { "XDG_DATA_HOME": "relative/xdg" },
+      "homeDir": "/home/player",
+      "cwd": "/opt/app",
+      "requireAbsoluteExplicit": true,
+      "expect": { "ok": true, "path": "/home/player/.local/share/StardewAgentBridge", "source": "default" }
+    },
+    {
+      "name": "linux-sab-home-absolute",
+      "parties": ["js", "cs"],
+      "platform": "linux",
+      "explicit": null,
+      "env": { "SAB_HOME": "/srv/sab data" },
+      "homeDir": "/home/player",
+      "cwd": "/opt/app",
+      "requireAbsoluteExplicit": true,
+      "expect": { "ok": true, "path": "/srv/sab data", "source": "SAB_HOME" }
+    },
+    {
+      "name": "linux-sab-home-beats-xdg",
+      "parties": ["js", "cs"],
+      "platform": "linux",
+      "explicit": null,
+      "env": { "SAB_HOME": "/srv/sab", "XDG_DATA_HOME": "/data/xdg" },
+      "homeDir": "/home/player",
+      "cwd": "/opt/app",
+      "requireAbsoluteExplicit": true,
+      "expect": { "ok": true, "path": "/srv/sab", "source": "SAB_HOME" }
+    },
+    {
+      "name": "linux-sab-home-relative-rejected",
+      "parties": ["js", "cs"],
+      "platform": "linux",
+      "explicit": null,
+      "env": { "SAB_HOME": "relative/dir" },
+      "homeDir": "/home/player",
+      "cwd": "/opt/app",
+      "requireAbsoluteExplicit": true,
+      "expect": { "ok": false, "errorCode": "PATH_INVALID" }
+    },
+    {
+      "name": "linux-localappdata-ignored",
+      "parties": ["js", "cs"],
+      "platform": "linux",
+      "explicit": null,
+      "env": { "LOCALAPPDATA": "C:\\Users\\player\\AppData\\Local" },
+      "homeDir": "/home/player",
+      "cwd": "/opt/app",
+      "requireAbsoluteExplicit": true,
+      "expect": { "ok": true, "path": "/home/player/.local/share/StardewAgentBridge", "source": "default" }
+    },
+    {
+      "name": "linux-explicit-chinese-and-space",
+      "parties": ["js", "cs"],
+      "platform": "linux",
+      "explicit": "/home/玩家/星露谷 数据",
+      "env": { "SAB_HOME": "/srv/sab" },
+      "homeDir": "/home/player",
+      "cwd": "/opt/app",
+      "requireAbsoluteExplicit": true,
+      "expect": { "ok": true, "path": "/home/玩家/星露谷 数据", "source": "explicit" }
+    },
+    {
+      "name": "linux-explicit-trailing-slash",
+      "parties": ["js", "cs"],
+      "platform": "linux",
+      "explicit": "/opt/sab/",
+      "env": {},
+      "homeDir": "/home/player",
+      "cwd": "/opt/app",
+      "requireAbsoluteExplicit": true,
+      "expect": { "ok": true, "path": "/opt/sab", "source": "explicit" }
+    },
+    {
+      "name": "linux-explicit-relative-rejected",
+      "parties": ["js", "cs"],
+      "platform": "linux",
+      "explicit": "relative",
+      "env": {},
+      "homeDir": "/home/player",
+      "cwd": "/opt/app",
+      "requireAbsoluteExplicit": true,
+      "expect": { "ok": false, "errorCode": "PATH_INVALID" }
+    },
+    {
+      "name": "linux-no-home",
+      "parties": ["js", "cs"],
+      "platform": "linux",
+      "explicit": null,
+      "env": {},
+      "homeDir": "",
+      "cwd": "/opt/app",
+      "requireAbsoluteExplicit": true,
+      "expect": { "ok": false, "errorCode": "NO_HOME" }
+    },
+    {
+      "name": "linux-case-sensitive-path-preserved",
+      "parties": ["js", "cs"],
+      "platform": "linux",
+      "explicit": "/opt/StardewAgentBridge",
+      "env": {},
+      "homeDir": "/home/player",
+      "cwd": "/opt/app",
+      "requireAbsoluteExplicit": true,
+      "expect": { "ok": true, "path": "/opt/StardewAgentBridge", "source": "explicit" }
+    },
+    {
+      "name": "win-locappdata-default",
+      "parties": ["js", "cs"],
+      "platform": "win32",
+      "explicit": null,
+      "env": { "LOCALAPPDATA": "C:\\Users\\player\\AppData\\Local" },
+      "homeDir": "C:\\Users\\player",
+      "cwd": "C:\\work",
+      "requireAbsoluteExplicit": true,
+      "expect": { "ok": true, "path": "C:\\Users\\player\\AppData\\Local\\StardewAgentBridge", "source": "LOCALAPPDATA" }
+    },
+    {
+      "name": "win-locappdata-trailing-backslash",
+      "parties": ["js", "cs"],
+      "platform": "win32",
+      "explicit": null,
+      "env": { "LOCALAPPDATA": "C:\\Users\\player\\AppData\\Local\\" },
+      "homeDir": "C:\\Users\\player",
+      "cwd": "C:\\work",
+      "requireAbsoluteExplicit": true,
+      "expect": { "ok": true, "path": "C:\\Users\\player\\AppData\\Local\\StardewAgentBridge", "source": "LOCALAPPDATA" }
+    },
+    {
+      "name": "win-default-from-home",
+      "parties": ["js", "cs"],
+      "platform": "win32",
+      "explicit": null,
+      "env": {},
+      "homeDir": "C:\\Users\\player",
+      "cwd": "C:\\work",
+      "requireAbsoluteExplicit": true,
+      "expect": { "ok": true, "path": "C:\\Users\\player\\AppData\\Local\\StardewAgentBridge", "source": "default" }
+    },
+    {
+      "name": "win-sab-home-absolute",
+      "parties": ["js", "cs"],
+      "platform": "win32",
+      "explicit": null,
+      "env": { "SAB_HOME": "D:\\sab" },
+      "homeDir": "C:\\Users\\player",
+      "cwd": "C:\\work",
+      "requireAbsoluteExplicit": true,
+      "expect": { "ok": true, "path": "D:\\sab", "source": "SAB_HOME" }
+    },
+    {
+      "name": "win-explicit-relative-rejected",
+      "parties": ["js", "cs"],
+      "platform": "win32",
+      "explicit": "sab",
+      "env": {},
+      "homeDir": "C:\\Users\\player",
+      "cwd": "C:\\work",
+      "requireAbsoluteExplicit": true,
+      "expect": { "ok": false, "errorCode": "PATH_INVALID" }
+    },
+    {
+      "name": "linux-explicit-relative-resolved-against-cwd",
+      "parties": ["js"],
+      "platform": "linux",
+      "explicit": "./local data",
+      "env": {},
+      "homeDir": "/home/player",
+      "cwd": "/opt/app",
+      "requireAbsoluteExplicit": false,
+      "expect": { "ok": true, "path": "/opt/app/local data", "source": "explicit" }
+    },
+    {
+      "name": "win-explicit-relative-resolved-against-cwd",
+      "parties": ["js"],
+      "platform": "win32",
+      "explicit": "..\\sab",
+      "env": {},
+      "homeDir": "C:\\Users\\player",
+      "cwd": "C:\\work\\app",
+      "requireAbsoluteExplicit": false,
+      "expect": { "ok": true, "path": "C:\\work\\sab", "source": "explicit" }
+    }
+  ]
+}

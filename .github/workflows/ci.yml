@@ -5,15 +5,17 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+
 jobs:
-  checks:
+  # Windows 是既有发布目标：保持原有检查顺序与入口不变。
+  windows:
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
-          node-version: '22'
+          node-version: '22.13.0'
           cache: npm
       - uses: actions/setup-dotnet@v5
         with:
@@ -25,3 +27,32 @@ jobs:
       - run: npm run test:installer
       # The actual game Mod requires the user's local game assemblies.
       # Game binaries and saves are never uploaded to this workflow.
+
+  # Linux 首版适配：只验证可自动化部分（编译、契约、安装事务、bridge-only 打包）。
+  # 不登录 Steam、不下载游戏、不接触玩家存档，也不做任何发布动作。
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.13.0'
+          cache: npm
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - run: npm ci
+      - name: 编译与类型检查
+        run: npm run build
+      - name: 契约与单元测试
+        run: npm test
+      - name: Mod 侧隔离测试（不加载游戏程序集）
+        run: npm run test:mod
+      - name: 安装/回退事务测试（临时目录，含故障注入）
+        run: npm run test:installer
+      - name: 打包 bridge-only（CI 用，不含 Mod）
+        run: npm run pack -- --target linux-x64 --skip-mod --runtime-root "$(dirname "$(command -v node)")/.." --node-version "v$(node -v | sed 's/^v//')" --allow-unverified-runtime --json
+      - name: 验证 bridge-only 包
+        run: npm run verify:package -- "$(ls -d release/StardewAgentBridge-*-linux-x64 | tail -n1)" --bridge-only
+      # 真实游戏验收（G01–G10）必须由人工在有图形界面的 Linux 桌面上完成，见 docs/LINUX_ACCEPTANCE.md。

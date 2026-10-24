@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, copyFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { buildSync } from 'esbuild';
 
 const root = path.resolve(import.meta.dirname, '..');
 const checkOnly = process.argv.includes('--check-only');
@@ -40,16 +41,8 @@ const webRoot = path.join(root, 'apps', 'web');
 const dist = path.join(webRoot, 'dist');
 if (!existsSync(dist)) mkdirSync(dist, { recursive: true });
 
-run(process.execPath, [
-    path.join(root, 'node_modules/esbuild/bin/esbuild'),
-    path.join(webRoot, 'src', 'main.ts'),
-    '--bundle',
-    '--format=esm',
-    '--target=es2022',
-    '--sourcemap',
-    `--outfile=${path.join(dist, 'app.js')}`,
-    '--log-level=warning'
-]);
+buildSync({ entryPoints: [path.join(webRoot, 'src', 'main.ts')], bundle: true, format: 'esm', target: 'es2022',
+    sourcemap: true, outfile: path.join(dist, 'app.js'), logLevel: 'warning' });
 
 for (const asset of ['index.html']) {
     copyFileSync(path.join(webRoot, asset), path.join(dist, asset));

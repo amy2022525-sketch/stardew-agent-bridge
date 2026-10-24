@@ -4,3 +4,6 @@ export * from './hosts.js';
 export * from './logger.js';
 export * from './paths.js';
 export * from './clients.js';
+export * from './instance-lock.js';
+export * from './launch.js';
+export * from './mod-config.js';

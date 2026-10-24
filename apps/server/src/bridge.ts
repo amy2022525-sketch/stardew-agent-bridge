@@ -6,7 +6,7 @@
  */
 import { createHmac, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { writeFileSync } from 'node:fs';
+import { unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
     createMcpHandler,
@@ -29,6 +29,7 @@ import {
 import { ModClient } from '@sab/game-client';
 import { ActionLedger, ActionService, ControlManager, EventLog } from '@sab/control-core';
 import { createToolServer } from '@sab/mcp';
+import { PRIVATE_FILE_MODE, atomicWriteFile, processIdentityOfCurrentProcess, readJsonIfExists } from '@sab/platform';
 import { AuthStore, loadConfig, type BridgeConfig } from './config.js';
 import { ClientRegistry } from './clients.js';
 import { generateHostConfig, HOST_LABELS, HOST_SUPPORT_MATRIX, type HostId, type TransportMode } from './hosts.js';
@@ -48,6 +49,8 @@ import { redactDiagnostics } from './redact.js';
 import { checkMcpConnection, MCP_CHECK_CLIENT_ID, validMcpClientId, type McpConnectionCheck } from './mcp-connections.js';
 
 export interface BridgeOptions {
+    /** CLI 在初始化账本前已成功绑定的端口；避免端口冲突触碰账本。 */
+    httpServer?: Server;
     dataDir?: string;
     webDist?: string;
     logger?: Logger;
@@ -81,10 +84,12 @@ export class Bridge {
     private readonly sessionToken: string;
     private readonly csrfToken: string;
     private boundPort = 0;
+    private endpointOwned = false;
     private mcpCheckRunning = false;
     private readonly mcpChecks: Partial<Record<TransportMode, McpConnectionCheck>> = {};
 
     constructor(options: BridgeOptions = {}) {
+        this.server = options.httpServer ?? null;
         const rootDir = resolveDataDir(options.dataDir);
         this.paths = dataPaths(rootDir, options.webDist);
         ensureDirs(this.paths);
@@ -189,28 +194,34 @@ export class Bridge {
     }
 
     async start(): Promise<number> {
-        this.mod.connect();
-        const server = createServer((req, res) => {
+        const server = this.server ?? createServer();
+        server.on('request', (req, res) => {
             void this.handle(req, res);
         });
         this.server = server;
-        const port = await new Promise<number>((resolve, reject) => {
+        const port = server.listening ? (server.address() as import('node:net').AddressInfo).port : await new Promise<number>((resolve, reject) => {
             server.once('error', reject);
             server.listen(this.config.bridgePort, '127.0.0.1', () => {
                 const address = server.address();
                 resolve(typeof address === 'object' && address ? address.port : this.config.bridgePort);
             });
         });
+        this.mod.connect();
         this.boundPort = port;
+        const identity = processIdentityOfCurrentProcess();
         const endpoint = {
             schemaVersion: CONTRACTS_SCHEMA_VERSION,
             bridgeVersion: BRIDGE_VERSION,
             port,
             mcpUrl: `http://127.0.0.1:${port}/mcp`,
             pid: process.pid,
+            processStart: identity.startTime,
+            dataRoot: this.paths.root,
             startedAt: this.startedAt
         };
-        writeFileSync(this.paths.endpoint, JSON.stringify(endpoint, null, 2), 'utf8');
+        // endpoint 是私人状态：原子写、0600，且只在本次实例确实监听成功后写入。
+        atomicWriteFile(this.paths.endpoint, `${JSON.stringify(endpoint, null, 2)}\n`, { mode: PRIVATE_FILE_MODE });
+        this.endpointOwned = true;
         this.logger.info(`Bridge 已监听 http://127.0.0.1:${port}/ （MCP: /mcp, Web: /）`);
         this.events.publish('bridge_started', { port, pid: process.pid });
         return port;
@@ -224,11 +235,28 @@ export class Bridge {
         this.legacySessions.clear();
         await this.mod.close();
         this.ledger.close();
+        this.releaseEndpoint();
         const server = this.server;
         this.server = null;
         if (server) {
             await new Promise<void>((resolve) => server.close(() => resolve()));
         }
+    }
+
+    /** 只移除本次实例写入的 endpoint；其他实例刚写的新文件保持不动。 */
+    private releaseEndpoint(): void {
+        if (!this.endpointOwned) return;
+        const current = readJsonIfExists<{ pid?: number }>(this.paths.endpoint);
+        if (!current || current.pid !== process.pid) {
+            this.endpointOwned = false;
+            return;
+        }
+        try {
+            unlinkSync(this.paths.endpoint);
+        } catch {
+            /* 已被清理 */
+        }
+        this.endpointOwned = false;
     }
 
     // -----------------------------------------------------------------------
@@ -248,6 +276,14 @@ export class Bridge {
                     bridgeVersion: BRIDGE_VERSION,
                     contractsSchemaVersion: CONTRACTS_SCHEMA_VERSION,
                     modConnected: this.mod.connected,
+                    modVersion: this.mod.hello?.modVersion ?? null,
+                    gameVersion: this.mod.hello?.gameVersion ?? null,
+                    smapiVersion: this.mod.hello?.smapiVersion ?? null,
+                    saveLoaded: this.mod.hello?.saveLoaded ?? null,
+                    worldGeneration: this.mod.hello?.worldGeneration ?? null,
+                    dataRoot: this.paths.root,
+                    pid: process.pid,
+                    processStart: processIdentityOfCurrentProcess().startTime,
                     uptimeMs: Date.now() - Date.parse(this.startedAt)
                 });
                 return;

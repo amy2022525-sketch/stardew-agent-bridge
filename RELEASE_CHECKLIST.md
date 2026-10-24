@@ -66,3 +66,22 @@
 2. 修代码 → 从 §1 重跑；不要跳过 `npm test`。
 3. 实机项失败：先 `F9` 停手 → `rollback:mod` → 恢复存档备份 → 再定位。
 4. 任何一项不通过，都**不要**把该项标成通过：本清单的价值就在于它不撒谎。
+
+## 8. Linux 源码预览与后续发布验收
+
+> 2026-10-24：已完成 Windows/WSL 构建、自动化测试和部分包验证，实际结果见
+> [LINUX_VALIDATION_REPORT.md](LINUX_VALIDATION_REPORT.md)。以下是完整发布的验收门槛；
+> 套件通过不代表真实游戏、完整包或每个验收编号均已通过，暂不自动勾选。
+> 详细步骤见 [docs/LINUX_ACCEPTANCE.md](docs/LINUX_ACCEPTANCE.md)；
+> [LINUX_HANDOVER_REPORT.md](LINUX_HANDOVER_REPORT.md) 保留原编写交付时的历史状态。
+
+- [ ] `npm ci && npm run build` 在 Ubuntu 24.04 + Node 22.13.0 上通过
+- [ ] `npm test`、`npm run test:mod`、`npm run test:installer` 全部通过（含新增契约向量与故障注入用例）
+- [ ] `npm run pack -- --target linux-x64 --runtime-root <node 发行目录>` 生成 full 包；`manifest.release.json` 标 `packageKind: full`、`runtime.bundled: true`
+- [ ] `npm run pack -- --target linux-x64 --skip-mod ...` 生成 `bridge-only-ci` 包，包内无 `mod/`
+- [ ] `npm run verify:package -- <包目录>` 在仓库外目录通过（含 `CHECKSUMS.txt` 覆盖、包内 Node ELF、脚本自包含、HTTP 与 stdio 真实往返）
+- [ ] 解压后的 `bin/stardew-agent-bridge version` / `doctor` 在受控 PATH（无系统 node/npm）下可用
+- [ ] 真实游戏目录下 `scripts/install-mod.mjs` 首次安装、升级、`--remove-only`、回退与重复回退幂等
+- [ ] `scripts/desktop-entry.mjs install/remove` 生成与删除 `.desktop`，`desktop-file-validate` 通过
+- [ ] 两份安装文档描述的路径与实际行为一致（数据根、快照目录、日志位置）
+- [ ] Linux CI job 绿；Windows job 仍绿（R01–R04 无退化）

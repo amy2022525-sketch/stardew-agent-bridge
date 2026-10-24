@@ -1,6 +1,8 @@
 # Stardew Agent Bridge
 
 > 0.1.0 源码预览。2026-10-23：Web 新增 MCP 连接面板，51 项 Node 测试和 11 项 MCP 浏览器检查通过。此前 17 项隔离 C# 检查、17 项安装脚本检查及部分真实游戏动作已有证据；钓鱼/战斗、完整消费与跨日流程、三个真实宿主仍有待验收项。完整结果见 [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md)，尚未发布稳定版 Release。
+>
+> 2026-10-24：Linux 源码预览已完成首轮验证：Ubuntu 24.04 / WSL2 的 136 项 Node 测试、20 项安装/恢复测试、19 项无游戏便携包检查通过。原生 Linux 游戏、图形浏览器、具体 Agent 短任务和完整安装包仍待验收；当前更新不代表稳定版 Linux Release。详见 [LINUX_VALIDATION_REPORT.md](LINUX_VALIDATION_REPORT.md) 与 [平台矩阵](docs/PLATFORM_MATRIX.md)。
 
 让**任意本地 MCP Agent**（DSH、Codex CLI、Claude Code……）观察并操作真实的星露谷游戏：一个 SMAPI Mod + 一个常驻本机 Bridge + 一个 Web 控制台，共用同一套游戏能力与同一份动作账本。
 
@@ -42,7 +44,7 @@ SMAPI Mod（游戏主线程）                      ← 唯一执行者
 
 ## 2. 快速开始（Windows，单人存档）
 
-前置：Windows 10/11、星露谷 1.6.15 + SMAPI 4.5.2、Node.js ≥ 22.5（用到内置 `node:sqlite`）。源码构建与隔离 C# 测试使用 .NET SDK 10；游戏 Mod 的目标仍为 net6.0，并引用你本机的游戏程序集。
+前置：Windows 10/11、星露谷 1.6.15 + SMAPI 4.5.2、Node.js ≥ 22.13.0（用到内置 `node:sqlite`）。源码构建与隔离 C# 测试使用 .NET SDK 10；游戏 Mod 的目标仍为 net6.0，并引用你本机的游戏程序集。
 
 1. **构建**（同时生成 Mod 与 Web 产物）
 
@@ -88,6 +90,21 @@ SMAPI Mod（游戏主线程）                      ← 唯一执行者
 
 7. 想让 Agent 真正动手时，在网页上点「获取控制权」（或让 Agent 调用 `stardew_session`）；结束后点「释放控制权」或按 `F9`。
 
+### Linux 首版（源码预览，已完成无游戏首轮验证）
+
+Linux 走同一套业务核心，差别只在宿主适配：发布包自带 Node 运行时、数据根走 XDG、Mod 安装/回退是事务化 MJS 脚本、菜单入口用 `.desktop`。
+
+```bash
+npm ci && npm run build
+GAME="/home/$USER/.local/share/Steam/steamapps/common/Stardew Valley"
+npm run build:mod -- --game-path "$GAME"
+node apps/server/dist/cli.js start &      # 发布包内是 bin/stardew-agent-bridge start
+npm run install:mod -- --game-path "$GAME"
+npm run doctor
+```
+
+完整步骤见 [docs/LINUX_INSTALL.md](docs/LINUX_INSTALL.md)，规则与代码边界见 [docs/LINUX_DEVELOPMENT.md](docs/LINUX_DEVELOPMENT.md)，平台差异见 [docs/PLATFORM_MATRIX.md](docs/PLATFORM_MATRIX.md)。
+
 ## 3. 工具面（28 个）
 
 | 类别 | 工具 | 说明 |
@@ -118,7 +135,7 @@ SMAPI Mod（游戏主线程）                      ← 唯一执行者
 
 ## 5. 数据目录
 
-`%LOCALAPPDATA%\StardewAgentBridge`（可用 `SAB_HOME` 覆盖）：
+Windows 默认 `%LOCALAPPDATA%\StardewAgentBridge`；Linux 默认 `$XDG_DATA_HOME/StardewAgentBridge`（未设置时为 `~/.local/share/StardewAgentBridge`）。两者都可用绝对路径的 `SAB_HOME` 覆盖。
 
 | 文件 | 内容 |
 | --- | --- |
@@ -137,10 +154,14 @@ npm test           # 51 个测试（契约 / 控制权 / MCP HTTP / Web MCP / �
 npm run test:mod   # 17 项真实 C# 控制源码隔离检查（不是游戏实测）
 npm run test:installer # 17 项 Windows 安装与回滚检查
 npm run clean
-npm run pack       # 生成 release\StardewAgentBridge-0.1.0\（含 CHECKSUMS.txt；不会上传）
+npm run pack       # Windows：生成 release\StardewAgentBridge-0.1.0\（含 CHECKSUMS.txt；不会上传）
+npm run pack -- --target linux-x64 --runtime-root <含 bin/node 的目录>   # Linux：包内自带运行时
+npm run verify:package -- <包目录>                                       # 仓库外隔离验证（HTTP + stdio）
 ```
 
-目录：`packages/contracts`（协议与工具定义）、`packages/game-client`（Mod WS 客户端）、`packages/control-core`（账本/控制权/动作服务）、`packages/mcp`（MCP 工具面）、`apps/server`（Bridge 进程 + `/api/v1` + Web 静态）、`apps/web`（无框架前端）、`adapters/stdio`（stdio 适配器）、`mods/StardewAgentBridge`（C# Mod）、`tests`（模拟 Mod 与端到端测试）。
+Linux 上 `npm run test:installer` 运行 `tests/scripts/install-rollback-linux.mjs`（临时目录伪造游戏目录、含 `SAB_FAIL_AT` 故障注入）；Windows 上仍转发到原有 PowerShell 测试。
+
+目录：`packages/contracts`（协议与工具定义）、`packages/platform`（数据根/权限/进程身份/桌面入口等跨平台能力）、`packages/game-client`（Mod WS 客户端）、`packages/control-core`（账本/控制权/动作服务）、`packages/mcp`（MCP 工具面）、`apps/server`（Bridge 进程 + `/api/v1` + Web 静态）、`apps/web`（无框架前端）、`adapters/stdio`（stdio 适配器）、`mods/StardewAgentBridge`（C# Mod）、`scripts/`（Windows `.ps1` 与 `scripts/linux/*.mjs`，由 `scripts/*.mjs` 按平台分派）、`tests`（模拟 Mod、契约向量与端到端测试）。
 
 ## 7. 验收状态
 
@@ -152,7 +173,8 @@ npm run pack       # 生成 release\StardewAgentBridge-0.1.0\（含 CHECKSUMS.tx
 | Web MCP 连接面板（真实浏览器 + 隔离 Bridge） | **已通过** 11 项；配置、复制下载、HTTP/stdio 检测、调用记录和 390px 布局 |
 | Mod 编译（`dotnet build`，引用真实游戏 DLL） | **已通过** 0 警告 0 错误 |
 | Bridge + Web 实进程自检（`/health`、`/`、`/mcp`、`scripts/smoke.mjs`） | **已通过**（无游戏时的降级行为也已验证） |
-| **真实游戏内实机验收** | **部分通过**：正常加载、移动、选槽、箱子存取与去重、制作、放置、等待、失联收手与 Web 接管。完整矩阵见 [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md) |
+| **Linux 首版（编译/测试/打包/实机）** | **未运行**：源码已编写，验证由原协作者执行，见 [LINUX_HANDOVER_REPORT.md](LINUX_HANDOVER_REPORT.md) |
+| **真实游戏内实机验收（Windows）** | **部分通过**：正常加载、移动、选槽、箱子存取与去重、制作、放置、等待、失联收手与 Web 接管。完整矩阵见 [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md) |
 
 ## 8. 许可证与来源
 

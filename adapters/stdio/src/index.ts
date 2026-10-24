@@ -7,13 +7,16 @@
  *
  * 令牌来源：SAB_HOME 下受当前用户保护的 credentials.json（`SAB_TOKEN` 可覆盖）。
  * 令牌绝不来自命令行参数，也不会写进 stdout；stdout 只承载 MCP 消息。
+ *
+ * 生命周期：只为自己的 session 与在途请求负责。宿主关闭 stdin 或本进程收到
+ * SIGTERM/SIGINT 时，只关闭本适配器；常驻 Bridge 继续为其他客户端服务。
  */
-import { existsSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { createToolServer, type ToolExecutor, type ToolResult } from '@sab/mcp';
 import { getTool } from '@sab/contracts';
+import { currentPlatformId, installShutdownHooks, readJsonIfExists, resolveDataRoot } from '@sab/platform';
 
 interface EndpointFile {
     port?: number;
@@ -24,57 +27,72 @@ function writeStderr(message: string): void {
     process.stderr.write(`${new Date().toISOString()} [stdio-adapter] ${message}\n`);
 }
 
+/** 与 Bridge 共用同一套解析规则；相对 SAB_HOME 在 Linux 上直接报错而不是猜测。 */
 function dataDir(): string {
-    const override = process.env.SAB_HOME;
-    if (override && override.trim().length > 0) return path.resolve(override);
-    const base = process.env.LOCALAPPDATA && process.env.LOCALAPPDATA.length > 0
-        ? process.env.LOCALAPPDATA
-        : path.join(os.homedir(), 'AppData', 'Local');
-    return path.join(base, 'StardewAgentBridge');
-}
-
-function readJson(file: string): Record<string, unknown> | null {
-    try {
-        if (!existsSync(file)) return null;
-        return JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
-    } catch {
-        return null;
-    }
+    return resolveDataRoot({
+        env: process.env,
+        platform: currentPlatformId(),
+        homeDir: os.homedir(),
+        cwd: process.cwd()
+    }).path;
 }
 
 interface Resolved {
     url: string;
     token: string | null;
     clientId: string;
+    dataRoot: string;
+    problem: string | null;
 }
 
 function resolveClient(): Resolved {
-    const root = dataDir();
     const clientId = process.env.SAB_CLIENT_ID ?? 'stdio';
-    const endpoint = readJson(path.join(root, 'endpoint.json')) as EndpointFile | null;
+    let root: string;
+    try {
+        root = dataDir();
+    } catch (error) {
+        return {
+            url: 'http://127.0.0.1:17655',
+            token: null,
+            clientId,
+            dataRoot: '',
+            problem: error instanceof Error ? error.message : String(error)
+        };
+    }
+    const endpoint = readJsonIfExists<EndpointFile>(path.join(root, 'endpoint.json'));
     const url =
         process.env.SAB_URL ??
-        (endpoint?.mcpUrl ? endpoint.mcpUrl.replace(/\/mcp$/, '') : `http://127.0.0.1:17655`);
+        (typeof endpoint?.mcpUrl === 'string' ? endpoint.mcpUrl.replace(/\/mcp$/, '') : 'http://127.0.0.1:17655');
     let token: string | null = process.env.SAB_TOKEN ?? null;
     if (!token) {
-        const credentials = readJson(path.join(root, 'credentials.json'));
-        const clients = credentials?.['clients'] as Record<string, { token?: string }> | undefined;
+        const credentials = readJsonIfExists<{ clients?: Record<string, { token?: string }> }>(
+            path.join(root, 'credentials.json')
+        );
+        const clients = credentials?.clients;
         const entry = clients?.[clientId] ?? clients?.['stdio'] ?? null;
         token = typeof entry?.token === 'string' ? entry.token : null;
     }
-    return { url, token, clientId };
+    return { url, token, clientId, dataRoot: root, problem: null };
 }
 
 const executor: ToolExecutor = {
     async executeTool(toolName: string, args: unknown, ctx): Promise<ToolResult> {
         const resolved = resolveClient();
+        if (resolved.problem) {
+            return {
+                isError: true,
+                text: `错误 CONFIG_INVALID: ${resolved.problem}\n请把 SAB_HOME 设为绝对路径，或用 stardew-agent-bridge hosts 生成的配置重新导入。`,
+                structured: { kind: 'error', fault: { code: 'CONFIG_INVALID', effectKnown: true, nextAction: 'fix_environment' } }
+            };
+        }
         if (!resolved.token) {
             return {
                 isError: true,
                 text:
                     `错误 BRIDGE_NOT_RUNNING: 没有找到客户端 ${resolved.clientId} 的本地令牌。\n` +
                     `请先启动 Bridge（npm start 或 stardew-agent-bridge start）以生成数据目录与凭据，` +
-                    `或用 stardew-agent-bridge token issue ${resolved.clientId} 创建令牌。`,
+                    `或用 stardew-agent-bridge token issue ${resolved.clientId} 创建令牌。\n` +
+                    `当前数据根：${resolved.dataRoot}`,
                 structured: { kind: 'error', fault: { code: 'BRIDGE_NOT_RUNNING', effectKnown: true, nextAction: 'fix_environment' } }
             };
         }
@@ -143,10 +161,12 @@ function readTimeout(toolName: string): number {
 
 function main(): void {
     const resolved = resolveClient();
-    if (!resolved.token) {
-        writeStderr(`未找到客户端 ${resolved.clientId} 的令牌；工具调用将返回明确错误而不是静默失败。`);
+    if (resolved.problem) {
+        writeStderr(`数据根解析失败：${resolved.problem}`);
+    } else if (!resolved.token) {
+        writeStderr(`未找到客户端 ${resolved.clientId} 的令牌（数据根 ${resolved.dataRoot}）；工具调用将返回明确错误而不是静默失败。`);
     }
-    writeStderr(`已启动，目标 Bridge=${resolved.url} clientId=${resolved.clientId}`);
+    writeStderr(`已启动，目标 Bridge=${resolved.url} clientId=${resolved.clientId} 数据根=${resolved.dataRoot || '(未确定)'}`);
     const handle = serveStdio(() =>
         createToolServer({
             serverInfo: { name: 'stardew-agent-bridge-stdio', version: '0.1.0' },
@@ -155,8 +175,15 @@ function main(): void {
             logger: (level, message, meta) => writeStderr(`${level} ${message}${meta ? ` ${JSON.stringify(meta)}` : ''}`)
         })
     );
-    process.on('SIGINT', () => {
-        void handle.close().then(() => process.exit(0));
+
+    // 只关闭本适配器：常驻 Bridge 与别人的会话不受影响。
+    installShutdownHooks({
+        name: 'stdio 适配器',
+        watchStdin: true,
+        log: (line) => writeStderr(line),
+        cleanup: async () => {
+            await handle.close();
+        }
     });
 }
 

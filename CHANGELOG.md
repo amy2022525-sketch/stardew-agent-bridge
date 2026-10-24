@@ -1,5 +1,22 @@
 # 变更记录
 
+## 2026-10-24：Linux 源码预览与首轮验证
+
+> Ubuntu 24.04 / WSL2：构建通过，136 项 Node 测试、20 项安装/恢复测试与19项无游戏便携包检查通过。Windows 构建、Mod 编译和基础回归已有通过记录。当前只同步源码预览；原生 Linux 游戏、图形浏览器、真实 Agent 与完整安装包仍待验收，见 [LINUX_VALIDATION_REPORT.md](LINUX_VALIDATION_REPORT.md)。
+
+- 验证修复：先锁定实例并绑定端口再打开账本，诊断和重复启动保留活动控制会话；实例锁使用原子 owner 目录并覆盖八进程竞争，`launch --json` 保持纯 JSON 输出。
+- 修复 Linux esbuild 入口执行方式、包内 Node 与权限验证，以及安装准备阶段失败的旧 Mod 恢复、进程中断恢复、重复回退、符号链接和事务路径检查。Windows 打包兼容缺少 Get-FileHash 的 PowerShell 环境。
+
+- 新增 `packages/platform`：数据根解析（Windows `%LOCALAPPDATA%` / Linux XDG，`SAB_HOME` 相对值明确拒绝）、原子写与 `0700`/`0600` 权限、Steam 库 VDF 解析、进程身份（`/proc/<pid>/stat` starttime）、桌面入口（Exec 转义、`X-SAB-Managed` 标记）、Node 版本与 `:memory:` SQLite 探测、信号/关闭钩子。
+- `apps/server` 接入平台层：实例锁（原子 owner 目录、原子诊断记录、陈旧锁与 PID 复用判定、只删自己的锁）、`launch` 只读探测复用（`endpoint.json` + `GET /health`）、只读 `doctor`（稳定问题码，不创建目录/不打开账本）、Mod 配置比对（`DataDirectory` 不一致报 `DATA_ROOT_MISMATCH`，绝不复制凭据掩盖）、`desktop install|remove`、退出码 0/1/2/3 明确化；`/health` 增加 `saveLoaded`/版本字段。
+- stdio 适配器改用共享数据根解析与关闭钩子：只结束自身，不影响常驻 Bridge。
+- 新增 Linux 脚本：`scripts/linux/{build-mod,install-mod,rollback-mod,pack,desktop-entry}.mjs` 与 `scripts/lib/{game-paths,install-journal}.mjs`；安装事务状态机 `preflight→staged→backuped→prepared→retired_old→committed→verified`，支持 `remove_only`/`rolled_back`/`failed`，可在任意失败点按真实阶段恢复，`SAB_FAIL_AT` 可注入故障。
+- 新增跨平台分派器 `scripts/{build-mod,install-mod,rollback-mod,pack,test-installer}.mjs`：Windows 转发既有 `.ps1`，保留安装/回退入口与断言；打包哈希计算增加 .NET 兼容实现。
+- `scripts/verify-package.mjs` 扩展为 Windows/Linux 共用：额外校验 `manifest.release.json` 逐文件哈希、包内 Node ELF 与版本、自包含脚本、禁止文件（游戏 DLL/存档/凭据/账本/`.map`/`node_modules`）。
+- Mod 侧新增 `PlatformPaths.cs` 与 `config.DataDirectory`，与 Node 共享 `tests/fixtures/platform-paths.json` 契约向量；`tests/mod` 增加对应检查。
+- 新增测试源码：`tests/src/{platform-paths,instance-lifecycle,linux-host-config,desktop-entry}.test.ts`、`tests/scripts/install-rollback-linux.mjs`（含故障注入与篡改拒绝）。
+- CI 拆为 `windows` 与 `linux`（ubuntu-24.04，Node 22.13.0）两个 job；Linux 只做编译、契约测试、安装事务测试与 bridge-only 打包验证，不登录 Steam、不接触存档、不发布。
+- 文档：新增 [docs/LINUX_INSTALL.md](docs/LINUX_INSTALL.md)、[docs/LINUX_DEVELOPMENT.md](docs/LINUX_DEVELOPMENT.md)、[docs/PLATFORM_MATRIX.md](docs/PLATFORM_MATRIX.md)、[docs/LINUX_ACCEPTANCE.md](docs/LINUX_ACCEPTANCE.md)；`engines.node` 提升到 `>=22.13.0`；Web 增加 `data-testid` 观察点与 390px 窄屏样式。
 ## 0.1.0 — 2026-10-22（源码预览，Windows / 本机 / 单人）
 
 ### 2026-10-23：Web MCP 连接

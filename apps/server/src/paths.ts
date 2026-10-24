@@ -1,13 +1,27 @@
 /**
  * 本机数据目录与文件布局。
  *
- * 默认 `%LOCALAPPDATA%\StardewAgentBridge`（可用 SAB_HOME 覆盖）。
- * 凭据、日志、数据库与静态文件分离；这些目录都不进入仓库。
+ * 目录解析统一走 `@sab/platform`（`resolveDataRoot`），本文件只负责把它映射成
+ * 具体文件路径并提供 `DataPaths` 接口。Windows 默认 `%LOCALAPPDATA%\StardewAgentBridge`
+ * 保持不变；Linux 使用 XDG 规则（见 packages/platform/src/data-root.ts）。
+ *
+ * 首版在一个应用根目录内保留原有相对布局：config、credentials、endpoint、ledger、
+ * logs、exports、screenshots。只对应用根按 XDG_DATA_HOME 选址，不声称已经按完整
+ * XDG 分类拆开配置/缓存/状态。
  */
 import { existsSync, mkdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+    APP_DIRECTORY_NAME,
+    PRIVATE_DIR_MODE,
+    ensurePrivateDir,
+    inspectLegacyDataRoot,
+    resolveDataRootForProcess,
+    type LegacyDataRootReport,
+    type ResolvedDataRoot
+} from '@sab/platform';
 
 export interface DataPaths {
     root: string;
@@ -19,13 +33,19 @@ export interface DataPaths {
     exports: string;
     screenshots: string;
     webDist: string;
+    /** 新增：实例锁（见 apps/server/src/instance-lock.ts）。 */
+    lock: string;
+    /** 新增：本应用图标等静态资源落地目录。 */
+    icons: string;
+}
+
+/** 完整描述（含来源），供 doctor/launch 报告使用。 */
+export function resolveDataRootDescriptor(override?: string): ResolvedDataRoot {
+    return resolveDataRootForProcess(override);
 }
 
 export function resolveDataDir(override?: string): string {
-    if (override && override.trim().length > 0) return path.resolve(override);
-    if (process.env.SAB_HOME && process.env.SAB_HOME.trim().length > 0) return path.resolve(process.env.SAB_HOME);
-    const base = process.env.LOCALAPPDATA && process.env.LOCALAPPDATA.length > 0 ? process.env.LOCALAPPDATA : path.join(os.homedir(), 'AppData', 'Local');
-    return path.join(base, 'StardewAgentBridge');
+    return resolveDataRootDescriptor(override).path;
 }
 
 /**
@@ -61,7 +81,9 @@ export function dataPaths(root: string, webDist?: string): DataPaths {
         logs: path.join(root, 'logs'),
         exports: path.join(root, 'exports'),
         screenshots: path.join(root, 'screenshots'),
-        webDist: resolveWebDist(sourceRoot(), webDist)
+        webDist: resolveWebDist(sourceRoot(), webDist),
+        lock: path.join(root, 'bridge.lock'),
+        icons: path.join(root, 'icons')
     };
 }
 
@@ -87,10 +109,25 @@ export function resolveStdioAdapter(): string {
     return resolved;
 }
 
+/**
+ * 新建数据目录。应用根本身与私人子目录使用 0700；
+ * 只处理本应用自己的目录，绝不修改祖先目录权限。
+ */
 export function ensureDirs(paths: DataPaths): void {
-    for (const dir of [paths.root, paths.logs, paths.exports, paths.screenshots]) {
-        if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    ensurePrivateDir(paths.root);
+    for (const dir of [paths.logs, paths.exports, paths.screenshots, paths.icons]) {
+        if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: PRIVATE_DIR_MODE });
     }
+}
+
+/** 旧 Linux 数据根诊断（只读，不合并、不删除）。 */
+export function legacyDataRootReport(paths: DataPaths): LegacyDataRootReport {
+    return inspectLegacyDataRoot({
+        homeDir: os.homedir(),
+        currentPath: paths.root,
+        env: process.env,
+        exists: candidate => existsSync(candidate)
+    });
 }
 
 /** 把绝对路径替换成 `<home>` / `<data>`，用于脱敏日志与问题包。 */
@@ -102,3 +139,5 @@ export function redactPath(value: string, paths?: DataPaths): string {
     out = out.replace(/[A-Za-z]:\\Users\\[^\\/\s]+/g, '<home>');
     return out;
 }
+
+export { APP_DIRECTORY_NAME };

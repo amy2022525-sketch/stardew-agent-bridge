@@ -104,3 +104,35 @@ powershell -ExecutionPolicy Bypass -File scripts/rollback-mod.ps1 -RestoreLatest
 1. `node apps/server/dist/cli.js doctor` 的完整输出。
 2. `logs/bridge.log` 里出错时间点前后 50 行（已脱敏）。
 3. 问题包：网页「导出诊断」→ `exports/` 下的 JSON（递归脱敏，不含令牌）。
+
+## 10. Linux 专有排查
+
+| 现象 | 原因 | 处理 |
+| --- | --- | --- |
+| `doctor` 报 `DATA_ROOT_MISMATCH` | Mod 的 `DataDirectory` 与 Bridge 数据根不同（常见：一次用 Steam 启动、一次用终端 `SAB_HOME` 启动） | 用 `scripts/install-mod.mjs --game-path <游戏目录> --data-dir <统一目录>` 重写配置；或长期固定 `SAB_HOME` |
+| `SAB_HOME` 是相对路径，直接 `PATH_INVALID` | Linux 上不猜 cwd | 改成绝对路径，例如 `SAB_HOME="$HOME/sab-data"` |
+| `doctor` 报 `LEGACY_DATA_ROOT` | 发现旧目录 `~/AppData/Local/StardewAgentBridge` | 本程序不自动合并：确认要沿用旧数据就显式 `--data-dir`/`SAB_HOME` 指过去，否则忽略 |
+| 启动退出码 2，日志写 `INSTANCE_CONFLICT` | 同一数据根已有活实例但端口未就绪 | 等它就绪或结束旧进程；`bridge.lock` 里记录了 pid 与启动身份，可直接核对 |
+| 启动后立刻退出，日志写 `PORT_CONFLICT` | 端口被其他程序占用 | 换端口或结束占用者；本程序不会去杀别人的进程 |
+| 桌面入口点不开 | 入口里写的是绝对路径，程序目录被移动过 | `scripts/desktop-entry.mjs install` 重新生成 |
+| 双击没反应，想直接看日志 | 桌面入口 `Terminal=false` | 在终端手动跑 `bin/stardew-agent-bridge launch`，或看 `<数据根>/logs/bridge.log` |
+| `bin/stardew-agent-bridge: Permission denied` | 解压工具丢了执行位，或挂载点 `noexec` | `chmod +x bin/stardew-agent-bridge runtime/node`；`noexec` 挂载需换目录 |
+| `Exec format error` | 用了错误架构的运行时（如 ARM 机器跑 x64） | 本版只支持 `linux-x64` |
+| `doctor` 报 `NODE_VERSION_UNSUPPORTED`（用系统 node 跑源码时） | Node 低于 22.13 | 升级系统 node，或用发布包自带的 `runtime/node` |
+| 安装器报 `MODS_NOT_WRITABLE` | 游戏目录属主不是当前用户 | 自行修正属主；本程序绝不调用 sudo |
+| 安装器报 `RECOVERY_REQUIRED`（退出码 3） | 上次事务停在中途 | `scripts/rollback-mod.mjs --game-path <游戏目录>` 恢复；journal 在 `<游戏目录>/.stardew-agent-bridge-backups/<事务ID>/journal.json` |
+| 回退报 `JOURNAL_TAMPERED` | 记录里的路径被改动或指向允许范围之外 | 保留现场，人工核对 journal 与快照后再决定；不要手改 JSON 骗过校验 |
+
+Linux 日志与现场位置：
+
+```
+<数据根>/logs/bridge.log                          Bridge 运行日志（已脱敏）
+<数据根>/endpoint.json                            端口/进程（只读探测用）
+<游戏目录>/.stardew-agent-bridge-backups/latest.json   最近一次安装事务
+<游戏目录>/.stardew-agent-bridge-backups/<事务ID>/     journal、备份、暂存
+<游戏目录>/Mods/StardewAgentBridge/config.json    Mod 配置（含 DataDirectory）
+```
+
+排障顺序建议：`doctor --json` → `<数据根>/logs/bridge.log` 末 50 行 → Mod 的
+`DataDirectory` 与 Bridge 数据根是否同一绝对路径 → 端口/锁 → SMAPI 日志
+（`<游戏目录>/smapi-internal` 与 `%SMAPI%` 输出的 `SMAPI-latest.txt`）。

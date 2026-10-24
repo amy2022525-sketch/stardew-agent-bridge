@@ -15,6 +15,7 @@
     "@sab/control-core": "*",
     "@sab/game-client": "*",
     "@sab/mcp": "*",
+    "@sab/platform": "*",
     "ws": "8.22.0"
   }
 }
