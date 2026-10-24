@@ -32,6 +32,9 @@
 | Linux 包仓库外验证 | 19 项通过；包内 Node、空 PATH、中文路径、HTTP/stdio、28 工具与 SIGTERM 清理 | linux-package-verification.log / .json |
 | package-lock 规范化 | 已用 npm 官方命令重生成/确认，未手写 integrity | windows-lockfile-canonicalization.log |
 | git diff --check | 通过 | 本轮命令退出码 0 |
+| GitHub Actions Windows（提交 b6d682a） | 构建通过；Node 131 通过 / 5 跳过；C# 77、安装 17 通过 | [Windows job](https://github.com/amy2022525-sketch/stardew-agent-bridge/actions/runs/40061667447/job/120776305070) |
+| GitHub Actions Ubuntu 24.04（提交 b6d682a） | 构建通过；Node 136、C# 77、安装 20 通过 | [Linux job](https://github.com/amy2022525-sketch/stardew-agent-bridge/actions/runs/40061667447/job/120776305214) |
+| GitHub Actions Linux bridge-only（提交 b6d682a） | 最新源码重打包，19 项仓库外验证通过；未上传二进制 | 同上 Linux job |
 
 原始日志和源码快照保存在维护者私有验证目录，不上传凭据、游戏数据或本机配置。本次提交的远端运行结果可在 [GitHub Actions](https://github.com/amy2022525-sketch/stardew-agent-bridge/actions) 查看。Windows 在发布前已对最终源码重新构建并运行全部 136 项 Node 测试；跳过的 5 项为 Linux 专属用例，Ubuntu 的完整运行包含这些用例。
 
@@ -58,11 +61,11 @@ Linux 包的 19 项验证包含：真实 SDK 握手、工具发现、认证状�
 
 ## 4. 未完成项与产物限制
 
-- **Linux 原生 C# 隔离检查尚未执行。** 已尝试在隔离目录获取 Linux .NET SDK 10.0.302，下载失败，安装未完成；临时安装进程已结束。Windows 的 77 条结果不能替代 Linux 原生运行结果。
+- **Linux C# 隔离检查已由 Ubuntu CI 补齐。** 本机 WSL 获取 .NET SDK 10.0.302 失败、未完成安装；随后 GitHub Actions 使用 Linux .NET SDK 10.0.402 执行 77 项检查全部通过。这些检查不加载真实游戏程序集，不代表 Mod 的 Linux 游戏加载验收。
 - **Linux 图形浏览器、菜单实际点击、剪贴板与下载交互尚未验收。** 当前通过的是协议/API 和自动化目录行为；未将 HTTP 200 当作 UI 验收。
 - **G01–G10 全部未进行原生 Linux 游戏验收。** 未宣称截图、正常玩法、看门狗、跨日保存或持续游玩已通过。
-- **真实 Linux Agent 客户端短任务未执行。** 本地验证阶段未触发远端 CI；本次源码推送后由 GitHub Actions 自动执行 Windows/Ubuntu 检查，结果以对应提交的检查记录为准。 真实 MCP SDK 与具体 DSH/Codex/Claude Code 宿主分别记录。
-- **归档与最终包需要继续处理。** 当前 Linux bridge-only-ci 目录包不是面向玩家的完整发行版，没有生成和复验最终 tar.gz；此前目录包早于最后一轮安装恢复修复，必须依据最新源码重打包，并对包内安装器再次执行隔离测试。不要分发现有目录包。
+- **真实 Linux Agent 客户端短任务未执行。** 本次源码推送已触发 GitHub Actions，Windows/Ubuntu 两个 job 均通过；该结果覆盖自动化检查。真实 MCP SDK 与具体 DSH/Codex/Claude Code 宿主分别记录。
+- **归档与最终包需要继续处理。** Linux bridge-only-ci 目录包不是面向玩家的完整发行版，没有生成和复验最终 tar.gz。本机此前目录包早于最后一轮安装恢复修复，不可分发；CI 已依据最新源码重打包并通过 19 项检查，但发行前仍须对包内安装器执行完整隔离场景、生成最终归档并复验。
 - Windows 最终源码的 build 与 136 项 Node 回归已在本次上传前重跑通过；当前 Windows 完整包的验证结果对应此前记录的构建时间点，发布新二进制包前仍须重新打包验证。
 - 全部测试编号仍须按完整预期逐条核对；本报告的套件通过不自动把所有 60 个验收编号改为 pass。未覆盖的权限不足、跨设备/空间不足、真实令牌轮换等分支仍保留待验收。
 
@@ -70,7 +73,7 @@ Linux 包的 19 项验证包含：真实 SDK 握手、工具发现、认证状�
 
 1. Windows 最新源码的 build/test 已完成：136 项、131 通过、5 项 Linux 专属跳过；后续若修改代码，重跑受影响的检查。
 2. 在 Ubuntu 隔离目录重新打 Linux bridge-only-ci 包，对包内安装器运行同样的 20 项场景，再生成 tar.gz、解压到仓库外并复验。
-3. 安装可用的 Linux .NET SDK，执行 test:mod；必要时使用新的已核验 10.0.x SDK，不为适配升级 Mod 的 net6.0 目标。
+3. Linux test:mod 已由 Ubuntu CI 补齐；后续更改 C# 时重跑该检查，不为适配升级 Mod 的 net6.0 目标。
 4. 验证真实浏览器和桌面入口；当前源码的浏览器失败处理仍需覆盖子进程非零退出场景。
 5. 在具备原生 Linux Steam/SMAPI 的图形桌面和 QA 存档上，执行 G01–G10 及真实 Agent 短任务。
 6. 本次源码预览可按用户授权先行上传；完整 Linux 安装包和稳定版发布仍须补齐平台矩阵、最终交付报告与原生游戏验收。
