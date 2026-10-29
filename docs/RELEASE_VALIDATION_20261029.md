@@ -26,16 +26,17 @@ Docker 补齐桌面网关连接关闭、MCP 管理命令的纯 JSON 输出、密
 | 原生发布包 | Windows 完整包 15 项、Linux 完整包 19 项独立目录检查通过；真实 HTTP/stdio 往返、29 工具、中文路径、校验和、禁止文件审计；Linux 还验证在无全局 Node 的 PATH 中运行包内 Node |
 | Docker Bridge 容器 | 新构建的 29d936a 代码镜像通过 7 项布局/权限检查、13 项实际 Web/HTTP/stdio 接入检查；第二容器共享 QA 数据卷被 flock 拒绝（实际退出码 13） |
 | Docker 备份恢复 | 新建 QA 卷上 7 项通过：离线备份、哈希校验、恢复、内容一致、篡改备份 verify/restore 均拒绝（退出码 17）、拒绝后内容未变；QA 卷保留 |
-| Docker 图形/工具镜像 | 重新构建与 noVNC 实测收尾中；发布前更新 |
-| GitHub CI | 代码提交 29d936a 的 [Bridge checks](https://github.com/amy2022525-sketch/stardew-agent-bridge/actions/runs/40822469540) 与 [Docker image checks](https://github.com/amy2022525-sketch/stardew-agent-bridge/actions/runs/40822469525) 均成功；原始 net10 C# 测试在两个平台运行通过。另已触发三镜像完整 CI |
+| Docker 图形/工具镜像 | 三镜像完整 [CI 构建](https://github.com/amy2022525-sketch/stardew-agent-bridge/actions/runs/40822800849) 通过。mod-build 本机以 UID 1000、只读根、禁用网络、临时输出目录再次编译当前 Mod 成功（0 警告/错误，引用本机 Windows 程序集，仅编译验证）；缺输入实际退出 11。本机 game-runtime 依赖下载过慢，停止该次下载，改由 GitHub 构建发行镜像 |
+| 实际 Linux/noVNC 浏览器 | [发行附件 CI](https://github.com/amy2022525-sketch/stardew-agent-bridge/actions/runs/40824644315) 在将要上传的 game-runtime 同一个镜像上执行 8 项通过：noVNC HTML、HTTP Origin、WebSocket 跨源及缺 Origin 拒绝、真实 RFB 握手、仅密码认证、Chrome 密码登录并渲染 Xvfb/Openbox、无 JS 错误。没有启动游戏；与 G 组分开 |
+| GitHub CI | 代码提交 29d936a 的 [Bridge checks](https://github.com/amy2022525-sketch/stardew-agent-bridge/actions/runs/40822469540) 与 [Docker image checks](https://github.com/amy2022525-sketch/stardew-agent-bridge/actions/runs/40822469525) 均成功；原始 net10 C# 测试在两个平台运行通过。发行镜像来源 SHA 与测试工具 SHA 分别记录在 `DockerImage-*.json`，上传后已逐一与 GitHub 返回的包哈希/大小交叉核对 |
 
 Linux 环境为 Ubuntu 24.04 WSL2，Node 22.13.0；源码在 ext4 中以 UID 1000 运行测试。官方 Node 运行时归档 SHA-256：`3ff0d57063c33313d73d0bdcebc4c778ad6be948234584694a042c6fe57164f6`。正式 Linux 包禁止使用 `--allow-unverified-runtime`。
 
 ## 3. 发行范围
 
-GitHub 此前没有标签/Release，因此本次建立一个统一预览版，不补造未曾存在的历史版本。下载项包括 Windows 完整包、Linux x64 完整包、独立 Mod、Docker 源码/Compose 工具包和 bridge-runtime / game-runtime / mod-build 三个 linux/amd64 离线镜像；另附外层 SHA256SUMS 与发布清单。Windows 使用系统 Node >=22.13；Linux 自带 Node。
+GitHub 此前没有标签/Release，因此本次建立一个统一预览版，不补造未曾存在的历史版本。下载项包括 Windows 完整包、Linux x64 完整包、独立 Mod、Docker 源码/Compose 工具包和 bridge-runtime / game-runtime / mod-build 三个 linux/amd64 离线镜像；另附 3 份 `DockerImage-*.json` 来源证明、外层 SHA256SUMS 与发布清单，合计 12 个附件。Windows 使用系统 Node >=22.13；Linux 自带 Node。
 
-镜像/包不包含游戏 DLL、Steam/SMAPI 安装文件、玩家存档、真实凭据或现有数据卷。源码归档不包括 node_modules、构建缓存和私人配置。镜像的构建来源与摘要记录在发行清单中；如其后只有验证文档提交，镜像仍引用实际构建代码提交。
+镜像/包不包含游戏 DLL、Steam/SMAPI 安装文件、玩家存档、真实凭据或现有数据卷。源码归档不包括 node_modules、构建缓存和私人配置。镜像的构建来源与摘要记录在发行清单中：代码提交为 `29d936a0df4765064a8e23efaa7eb0de199fd3e1`，随后只增加发布工作流、独立图形测试工具与验证/安装文档，应用代码没有变化。发行页直接附完整镜像，不要求用户从 Actions 下载过期工件，也不要求镜像仓库登录。
 
 ## 4. 仍未验收
 
