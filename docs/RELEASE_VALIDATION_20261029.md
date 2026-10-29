@@ -23,9 +23,11 @@ Docker 补齐桌面网关连接关闭、MCP 管理命令的纯 JSON 输出、密
 | Linux `npm run test:installer` | 20 项通过；仅临时目录与故障注入 |
 | 实际 Mod 编译 | 本机合法 1.6.15.24356 游戏程序集 + SMAPI 4.5.2，net6.0，0 警告、0 错误；编译不等同加载验收 |
 | 隔离浏览器 | 14 项通过；绑定/API、实时控制、接管、MCP HTTP 配置与 29 工具发现、390px 布局。使用真实 Bridge 与 Mock Mod；Docker 状态按钮部分使用显式合成状态 |
-| 原生发布包 | 收尾制作与校验中；发布前更新 |
-| Docker 实际镜像/容器 | 收尾重新构建与验证中；发布前更新 |
-| GitHub CI | 待推送当前提交后核验，不能沿用旧 SHA 的成功结果 |
+| 原生发布包 | Windows 完整包 15 项、Linux 完整包 19 项独立目录检查通过；真实 HTTP/stdio 往返、29 工具、中文路径、校验和、禁止文件审计；Linux 还验证在无全局 Node 的 PATH 中运行包内 Node |
+| Docker Bridge 容器 | 新构建的 29d936a 代码镜像通过 7 项布局/权限检查、13 项实际 Web/HTTP/stdio 接入检查；第二容器共享 QA 数据卷被 flock 拒绝（实际退出码 13） |
+| Docker 备份恢复 | 新建 QA 卷上 7 项通过：离线备份、哈希校验、恢复、内容一致、篡改备份 verify/restore 均拒绝（退出码 17）、拒绝后内容未变；QA 卷保留 |
+| Docker 图形/工具镜像 | 重新构建与 noVNC 实测收尾中；发布前更新 |
+| GitHub CI | 代码提交 29d936a 的 [Bridge checks](https://github.com/amy2022525-sketch/stardew-agent-bridge/actions/runs/40822469540) 与 [Docker image checks](https://github.com/amy2022525-sketch/stardew-agent-bridge/actions/runs/40822469525) 均成功；原始 net10 C# 测试在两个平台运行通过。另已触发三镜像完整 CI |
 
 Linux 环境为 Ubuntu 24.04 WSL2，Node 22.13.0；源码在 ext4 中以 UID 1000 运行测试。官方 Node 运行时归档 SHA-256：`3ff0d57063c33313d73d0bdcebc4c778ad6be948234584694a042c6fe57164f6`。正式 Linux 包禁止使用 `--allow-unverified-runtime`。
 

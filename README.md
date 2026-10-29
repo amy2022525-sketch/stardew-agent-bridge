@@ -11,8 +11,8 @@
 | Mod ZIP | 两个平台通用的 net6.0 Mod 程序集；需合法游戏/SMAPI | [原生安装](docs/LINUX_INSTALL.md)、[联机安装](docs/MULTIPLAYER_INSTALL.md) |
 | Docker 三个镜像归档 | Bridge / 图形游戏环境 / Mod 编译工具，按需加载 | [Docker 安装](docs/DOCKER_INSTALL.md) |
 | Docker source ZIP | Compose、管理脚本、完整公开源码，可本地重建镜像 | [Docker 开发](docs/DOCKER_DEVELOPMENT.md) |
->
-> 2026-10-24：Linux 源码预览已完成首轮验证：Ubuntu 24.04 / WSL2 的 136 项 Node 测试、20 项安装/恢复测试、19 项无游戏便携包检查通过。原生 Linux 游戏、图形浏览器、具体 Agent 短任务和完整安装包仍待验收；当前更新不代表稳定版 Linux Release。详见 [LINUX_VALIDATION_REPORT.md](LINUX_VALIDATION_REPORT.md) 与 [平台矩阵](docs/PLATFORM_MATRIX.md)。
+
+历史首轮 Linux 验证记录保留在 [LINUX_VALIDATION_REPORT.md](LINUX_VALIDATION_REPORT.md)。当前测试数量、完整包和 Docker 验证以本页顶部的 2026-10-29 报告为准。
 
 让**任意本地 MCP Agent**（DSH、Codex CLI、Claude Code……）观察并操作真实的星露谷游戏：一个 SMAPI Mod + 一个常驻本机 Bridge + 一个 Web 控制台，共用同一套游戏能力与同一份动作账本。
 

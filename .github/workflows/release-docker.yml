@@ -1,0 +1,95 @@
+name: Prepare Docker release assets
+on:
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: 'Existing draft prerelease ID (never publishes it)'
+        required: true
+        type: string
+      source_commit:
+        description: 'Full code commit to build'
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  docker-assets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [bridge-runtime, game-runtime, mod-build]
+    env:
+      GH_REPO: ${{ github.repository }}
+      RELEASE_ID: ${{ inputs.release_id }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+      TARGET: ${{ matrix.target }}
+    steps:
+      - name: Validate draft destination and source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_ID" =~ ^[0-9]+$ ]]
+          [[ "$SOURCE_COMMIT" =~ ^[a-f0-9]{40}$ ]]
+          gh api "repos/$GH_REPO/releases/$RELEASE_ID" > "$RUNNER_TEMP/destination.json"
+          jq -e '.draft == true and .prerelease == true and (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+-preview\\.[0-9]+$"))' "$RUNNER_TEMP/destination.json" > /dev/null
+          echo "RELEASE_TAG=$(jq -r .tag_name "$RUNNER_TEMP/destination.json")" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_commit }}
+      - name: Build and export one image (no proprietary inputs)
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(node -p 'require("./package.json").version')
+          test "v$version" = "$RELEASE_TAG"
+          image="local/stardew-agent-bridge:$TARGET"
+          versioned="local/stardew-agent-bridge:$version-$TARGET"
+          file=docker/Dockerfile
+          extra=(--target "$TARGET")
+          if [ "$TARGET" = mod-build ]; then file=docker/Dockerfile.mod-build; extra=(); fi
+          docker build --platform linux/amd64 -f "$file" "${extra[@]}" --tag "$image" \
+            --build-arg "SAB_SOURCE_COMMIT=$SOURCE_COMMIT" --build-arg SAB_WORKTREE_DIRTY=false \
+            --build-arg "SAB_BUILD_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)" .
+          docker tag "$image" "$versioned"
+          archive="$RUNNER_TEMP/StardewAgentBridge-$version-docker-$TARGET-amd64.tar.gz"
+          docker save "$image" "$versioned" | gzip -6 > "$archive"
+          gzip -t "$archive"
+          docker image inspect "$image" > "$RUNNER_TEMP/image-inspect.json"
+          echo "ARCHIVE=$archive" >> "$GITHUB_ENV"
+      - name: Write public image provenance
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import crypto from 'node:crypto';
+          const env = process.env;
+          const raw = JSON.parse(fs.readFileSync(path.join(env.RUNNER_TEMP, 'image-inspect.json'), 'utf8'))[0];
+          const labels = raw.Config.Labels;
+          if (labels['org.opencontainers.image.revision'] !== env.SOURCE_COMMIT) throw new Error('Image source mismatch');
+          const hash = crypto.createHash('sha256');
+          for await (const chunk of fs.createReadStream(env.ARCHIVE)) hash.update(chunk);
+          const result = { schemaVersion: 1, target: env.TARGET, sourceCommit: env.SOURCE_COMMIT,
+            version: labels['org.opencontainers.image.version'], imageId: raw.Id, tags: raw.RepoTags,
+            architecture: raw.Architecture, os: raw.Os, archive: path.basename(env.ARCHIVE),
+            bytes: fs.statSync(env.ARCHIVE).size, sha256: hash.digest('hex'),
+            workflowRun: `https://github.com/${env.GH_REPO}/actions/runs/${env.GITHUB_RUN_ID}` };
+          const output = path.join(env.RUNNER_TEMP, `DockerImage-${env.TARGET}.json`);
+          fs.writeFileSync(output, JSON.stringify(result, null, 2) + '\n');
+          fs.appendFileSync(env.GITHUB_ENV, `IMAGE_METADATA=${output}\n`);
+          NODE
+      - name: Upload to the existing draft only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GH_REPO/releases/$RELEASE_ID" | jq -e '.draft == true and .prerelease == true' > /dev/null
+          gh release upload "$RELEASE_TAG" "$ARCHIVE" "$IMAGE_METADATA" --clobber
+          # Deliberately no publish, tag, registry login, game input or save operations.

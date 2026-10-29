@@ -29,10 +29,10 @@ node scripts/docker/build.mjs --target bridge-runtime
 mkdir -p "$HOME/.config/sab"
 cp docker/example.env "$HOME/.config/sab/docker.env"
 chmod 600 "$HOME/.config/sab/docker.env"
-node scripts/docker/manage.mjs doctor --project sab-local --env-file "$HOME/.config/sab/docker.env"
-node scripts/docker/manage.mjs plan --project sab-local --env-file "$HOME/.config/sab/docker.env"
-node scripts/docker/manage.mjs up --project sab-local --env-file "$HOME/.config/sab/docker.env"
-node scripts/docker/manage.mjs status --project sab-local --env-file "$HOME/.config/sab/docker.env" --json
+node -- scripts/docker/manage.mjs doctor --project sab-local --env-file "$HOME/.config/sab/docker.env"
+node -- scripts/docker/manage.mjs plan --project sab-local --env-file "$HOME/.config/sab/docker.env"
+node -- scripts/docker/manage.mjs up --project sab-local --env-file "$HOME/.config/sab/docker.env"
+node -- scripts/docker/manage.mjs status --project sab-local --env-file "$HOME/.config/sab/docker.env" --json
 ```
 
 `example.env` 默认外部端口为 18055，浏览器打开 `http://127.0.0.1:18055/`。只对宿主回环暴露网关 17656，Bridge 自身的 17655 和 Mod 的 17654 均在容器内部。修改端口时同时修改 `SAB_HTTP_PORT` 与 `SAB_PUBLIC_BASE_URL`，后者不带末尾 `/`。
@@ -46,7 +46,7 @@ HTTP：从 Web「MCP 连接」选择客户端与 HTTP，生成并复制配置。
 stdio：宿主 Agent 通过 `docker compose exec -T` 调用容器内适配器。不能把容器路径 `/opt/sab/...` 当成宿主可执行路径。Web 会提示用宿主管理工具生成（容器不知道宿主源码/env 的真实路径）：
 
 ```bash
-node scripts/docker/manage.mjs mcp-config --host dsh --transport stdio --client-id dsh \
+node -- scripts/docker/manage.mjs mcp-config --host dsh --transport stdio --client-id dsh \
   --issue-token --project sab-local --env-file "$HOME/.config/sab/docker.env"
 ```
 
@@ -76,8 +76,8 @@ node scripts/docker/build.mjs --target mod-build
 docker compose -p sab-local --project-directory "$PWD" --env-file "$HOME/.config/sab/docker.env" \
   -f docker/compose.yaml -f docker/compose.game.yaml -f docker/compose.tools.yaml \
   run --rm --no-deps mod-build --json
-node scripts/docker/manage.mjs check-input --game --project sab-local --env-file "$HOME/.config/sab/docker.env"
-node scripts/docker/manage.mjs up --game --project sab-local --env-file "$HOME/.config/sab/docker.env"
+node -- scripts/docker/manage.mjs check-input --game --project sab-local --env-file "$HOME/.config/sab/docker.env"
+node -- scripts/docker/manage.mjs up --game --project sab-local --env-file "$HOME/.config/sab/docker.env"
 ```
 
 预期先到 `awaiting_save`：游戏在标题页，Mod 已握手，等待人工或 Agent 正常载入单人测试存档。程序不会自动选档、自动创建角色、自动保存或代替真人购买/登录 Steam。
@@ -89,7 +89,7 @@ node scripts/docker/manage.mjs up --game --project sab-local --env-file "$HOME/.
 只在 game 模式启用。生成恰好 8 位字母数字的密码到私有文件（不要放 env 或命令行）：
 
 ```bash
-node scripts/docker/manage.mjs generate-secret vnc-password --output "$HOME/.config/sab/vnc-password"
+node -- scripts/docker/manage.mjs generate-secret vnc-password --output "$HOME/.config/sab/vnc-password"
 ```
 
 私有 env 填入文件路径和访问地址：
@@ -107,10 +107,10 @@ SAB_DESKTOP_BASE_URL=http://127.0.0.1:6080
 先正常保存并退到标题页，再结束 Agent 控制。然后运行 `down`（如有已载入存档，工具默认拒绝；`--accept-unsaved-progress` 代表明确接受丢失未保存进度的风险）。工具从不附加 `--volumes`。
 
 ```bash
-node scripts/docker/manage.mjs down --game --project sab-local --env-file "$HOME/.config/sab/docker.env"
-node scripts/docker/manage.mjs backup create --game --project sab-local --env-file "$HOME/.config/sab/docker.env"
-node scripts/docker/manage.mjs backup list --game --project sab-local --env-file "$HOME/.config/sab/docker.env"
-node scripts/docker/manage.mjs backup verify --backup-id <ID> --game --project sab-local --env-file "$HOME/.config/sab/docker.env"
+node -- scripts/docker/manage.mjs down --game --project sab-local --env-file "$HOME/.config/sab/docker.env"
+node -- scripts/docker/manage.mjs backup create --game --project sab-local --env-file "$HOME/.config/sab/docker.env"
+node -- scripts/docker/manage.mjs backup list --game --project sab-local --env-file "$HOME/.config/sab/docker.env"
+node -- scripts/docker/manage.mjs backup verify --backup-id <ID> --game --project sab-local --env-file "$HOME/.config/sab/docker.env"
 ```
 
 备份/恢复必须离线、全程持有独占卷租约。备份包含私有凭据和游戏 home，应保密。恢复要显式提供备份 ID 并按工具提示确认；未完成的跨卷恢复用 `recover-restore`，不要删除事务文件或锁文件。备份只覆盖 sab-data 与 game-home；游戏工作副本可从合法只读输入重建，Mod 从同版源码重建。
@@ -120,8 +120,8 @@ node scripts/docker/manage.mjs backup verify --backup-id <ID> --game --project s
 ## 7. 故障定位
 
 ```bash
-node scripts/docker/manage.mjs logs --tail 100 --project sab-local --env-file "$HOME/.config/sab/docker.env"
-node scripts/docker/manage.mjs doctor --project sab-local --env-file "$HOME/.config/sab/docker.env" --json
+node -- scripts/docker/manage.mjs logs --tail 100 --project sab-local --env-file "$HOME/.config/sab/docker.env"
+node -- scripts/docker/manage.mjs doctor --project sab-local --env-file "$HOME/.config/sab/docker.env" --json
 ```
 
 退出码：10 配置、11 缺输入、12 权限、13 卷归属/锁冲突、14 恢复事务、15 启动超时、16 子进程退出、17 备份校验、18 未保存进度、19 Docker 不可用。HTTP 403 检查 Host/Origin 是否和私有 env 的规范回环地址一致。WSL 内配置要使用 Linux 路径；跨平台 Agent 连接建议用 HTTP。
