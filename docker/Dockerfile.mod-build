@@ -1,0 +1,29 @@
+# syntax=docker/dockerfile:1.7
+ARG NODE_IMAGE=node:22.13.0-bookworm-slim
+FROM ${NODE_IMAGE} AS node-runtime
+FROM mcr.microsoft.com/dotnet/sdk:8.0.415-bookworm-slim
+ARG SAB_UID=1000
+ARG SAB_GID=1000
+ARG SAB_SOURCE_COMMIT=unknown
+LABEL org.opencontainers.image.title="stardew-agent-bridge-mod-build" \
+      org.opencontainers.image.source="https://github.com/amy2022525-sketch/stardew-agent-bridge" \
+      org.opencontainers.image.version="0.2.0-preview.1" \
+      org.opencontainers.image.licenses="MIT" org.opencontainers.image.revision="${SAB_SOURCE_COMMIT}"
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /usr/local/LICENSE /opt/sab/licenses/node-LICENSE
+RUN apt-get update && apt-get install -y --no-install-recommends util-linux \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid "${SAB_GID}" sab && useradd --uid "${SAB_UID}" --gid "${SAB_GID}" --create-home sab \
+    && mkdir -p /opt/sab/modsrc /input/mod /var/lib/sab /run/sab /var/backups/sab /srv/game \
+    && chown "${SAB_UID}:${SAB_GID}" /input/mod /var/lib/sab /run/sab /home/sab /var/backups/sab /srv/game \
+    && chmod 0700 /input/mod /var/lib/sab /run/sab /home/sab /var/backups/sab /srv/game
+COPY mods/StardewAgentBridge/ /opt/sab/modsrc/
+COPY scripts/docker/runtime/ /opt/sab/container/
+COPY LICENSE NOTICE.md /opt/sab/licenses/
+ENV NUGET_PACKAGES=/opt/sab/nuget DOTNET_CLI_HOME=/tmp/dotnet DOTNET_NOLOGO=true DOTNET_CLI_TELEMETRY_OPTOUT=1 HOME=/tmp/sab-home SAB_PROJECT=standalone SAB_SOURCE_COMMIT=${SAB_SOURCE_COMMIT}
+RUN chmod 1777 /tmp \
+    && dotnet restore /opt/sab/modsrc/StardewAgentBridge.csproj -p:BaseIntermediateOutputPath=/tmp/restore-obj/ \
+    && chmod -R a+rX /opt/sab/nuget && chmod -R a-w /opt/sab/modsrc
+USER ${SAB_UID}:${SAB_GID}
+WORKDIR /input/mod
+ENTRYPOINT ["/usr/local/bin/node", "/opt/sab/container/lease-entrypoint.mjs", "--entry", "mod-build", "--"]

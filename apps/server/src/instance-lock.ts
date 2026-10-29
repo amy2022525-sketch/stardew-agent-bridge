@@ -1,6 +1,7 @@
 /**
- * bridge.lock 是诊断记录；伴随目录通过原子 mkdir 串行化发布与陈旧锁接管。
- * 恢复时只删除确认死亡的 owner 文件，rmdir 拒绝删除新实例的非空目录。
+ * bridge.lock 是诊断记录；伴随目录通过原子发布非空目录串行化获取与接管。
+ * owner 必须先在候选目录写完，再 rename 发布，避免 mkdir 与写 owner 之间
+ * 的空目录被另一个陈旧锁清理者删除。rmdir 无法删除已发布的非空新目录。
  */
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, renameSync, rmdirSync, statSync, unlinkSync, writeSync } from 'node:fs';
 import path from 'node:path';
@@ -94,50 +95,55 @@ export function acquireInstanceLock(input: AcquireLockInput): AcquireLockResult 
     if (!/^[a-zA-Z0-9-]+$/.test(record.nonce)) throw new Error('实例 nonce 格式无效。');
     const directory = input.lockPath + '.owners';
     const ownerFile = path.join(directory, record.pid + '-' + record.nonce + '.json');
+    const candidate = directory + '.candidate-' + record.pid + '-' + record.nonce;
+    const candidateOwner = path.join(candidate, path.basename(ownerFile));
     const held = (existing = readInstanceLock(input.lockPath)): AcquireLockResult => ({
         acquired: false, reason: 'held', record: existing,
         message: '数据根 ' + input.dataRoot + ' 已有 Bridge 持锁或正在启动；同一个数据根只允许一个实例，请复用 launch/doctor。'
     });
-    for (let attempt = 0; attempt < 4; attempt++) {
-        try { mkdirSync(directory, { mode: 0o700 }); } catch (error) {
-            if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
-                if (recoverOwnerDirectory(directory, deps)) continue;
-                return held();
-            }
-            return { acquired: false, reason: 'unwritable', record: null, message: String(error) };
-        }
-        try {
-            const initial = statSync(directory);
-            writeLockFile(ownerFile, record);
-            const current = statSync(directory);
-            if (initial.dev !== current.dev || initial.ino !== current.ino) {
-                removeOwner(directory, ownerFile);
-                return held();
-            }
-            const existing = readInstanceLock(input.lockPath);
-            if ((existing && !isInstanceLockStale(existing, deps)) ||
-                (!existing && existsSync(input.lockPath) && !oldEnough(input.lockPath))) {
-                removeOwner(directory, ownerFile);
-                return held(existing);
-            }
-            writeLockFile(input.lockPath, record);
-            return {
-                acquired: true,
-                handle: {
-                    record,
-                    stillOwned: () => readInstanceLock(input.lockPath)?.nonce === record.nonce && existsSync(ownerFile),
-                    release: () => {
-                        if (readInstanceLock(input.lockPath)?.nonce === record.nonce) {
-                            try { unlinkSync(input.lockPath); } catch {}
-                        }
-                        removeOwner(directory, ownerFile);
-                    }
+    try {
+        mkdirSync(candidate, { mode: 0o700 });
+        writeLockFile(candidateOwner, record);
+        for (let attempt = 0; attempt < 4; attempt++) {
+            try { renameSync(candidate, directory); } catch (error) {
+                // Linux 返回 ENOTEMPTY，Windows 还可能返回 EACCES/EPERM。
+                // 只有目标确实存在时才走锁恢复，不能掩盖其他写入错误。
+                if (existsSync(directory)) {
+                    if (recoverOwnerDirectory(directory, deps)) continue;
+                    return held();
                 }
-            };
-        } catch (error) {
-            removeOwner(directory, ownerFile);
-            return { acquired: false, reason: 'unwritable', record: null, message: String(error) };
+                return { acquired: false, reason: 'unwritable', record: null, message: String(error) };
+            }
+            try {
+                const existing = readInstanceLock(input.lockPath);
+                if ((existing && !isInstanceLockStale(existing, deps)) ||
+                    (!existing && existsSync(input.lockPath) && !oldEnough(input.lockPath))) {
+                    removeOwner(directory, ownerFile);
+                    return held(existing);
+                }
+                writeLockFile(input.lockPath, record);
+                return {
+                    acquired: true,
+                    handle: {
+                        record,
+                        stillOwned: () => readInstanceLock(input.lockPath)?.nonce === record.nonce && existsSync(ownerFile),
+                        release: () => {
+                            if (readInstanceLock(input.lockPath)?.nonce === record.nonce) {
+                                try { unlinkSync(input.lockPath); } catch {}
+                            }
+                            removeOwner(directory, ownerFile);
+                        }
+                    }
+                };
+            } catch (error) {
+                removeOwner(directory, ownerFile);
+                return { acquired: false, reason: 'unwritable', record: null, message: String(error) };
+            }
         }
+        return held();
+    } catch (error) {
+        return { acquired: false, reason: 'unwritable', record: null, message: String(error) };
+    } finally {
+        removeOwner(candidate, candidateOwner);
     }
-    return held();
 }

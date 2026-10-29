@@ -1,0 +1,54 @@
+name: stardew-agent-bridge
+services:
+  runtime:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: bridge-runtime
+      args:
+        SAB_UID: "${SAB_UID:-1000}"
+        SAB_GID: "${SAB_GID:-1000}"
+    image: "${SAB_IMAGE_PREFIX:-local/stardew-agent-bridge}:bridge-runtime"
+    platform: linux/amd64
+    init: true
+    user: "${SAB_UID:-1000}:${SAB_GID:-1000}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    stop_grace_period: 45s
+    mem_limit: 512m
+    pids_limit: 128
+    labels:
+      io.stardew-agent-bridge.application: stardew-agent-bridge
+    environment:
+      SAB_PROJECT: "${COMPOSE_PROJECT_NAME}"
+      SAB_RUN_MODE: bridge
+      SAB_HOME: /var/lib/sab
+      SAB_WEB_DIST: /opt/sab/web
+      HOME: /tmp/sab-home
+      SAB_HTTP_PORT: "${SAB_HTTP_PORT:-17655}"
+      SAB_PUBLIC_BASE_URL: "${SAB_PUBLIC_BASE_URL:-}"
+      SAB_LOG_LEVEL: "${SAB_LOG_LEVEL:-info}"
+      SAB_STARTUP_TIMEOUT_MS: "${SAB_STARTUP_TIMEOUT_MS:-180000}"
+      SAB_SHUTDOWN_TIMEOUT_MS: "${SAB_SHUTDOWN_TIMEOUT_MS:-35000}"
+    ports:
+      - "127.0.0.1:${SAB_HTTP_PORT:-17655}:17656"
+    volumes:
+      - sab-data:/var/lib/sab
+    tmpfs:
+      - "/tmp:rw,nosuid,nodev,mode=1777"
+      - "/run/sab:rw,nosuid,nodev,uid=${SAB_UID:-1000},gid=${SAB_GID:-1000},mode=0700"
+    healthcheck:
+      test: [CMD, /usr/local/bin/node, /opt/sab/container/healthcheck.mjs]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  sab-data:

@@ -1,0 +1,38 @@
+services:
+  runtime:
+    build:
+      target: game-runtime
+    image: "${SAB_IMAGE_PREFIX:-local/stardew-agent-bridge}:game-runtime"
+    command: ["--mode", game]
+    restart: "no"
+    mem_limit: 4g
+    pids_limit: 512
+    shm_size: 256mb
+    environment:
+      SAB_RUN_MODE: game
+      HOME: /home/sab
+      DISPLAY: ":99"
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      SAB_GAME_ROOT: /srv/game/current
+      SAB_MOD_ARTIFACTS: /input/mod/current
+      SAB_DESKTOP_ENABLED: "false"
+      SAB_DISPLAY_SIZE: "${SAB_DISPLAY_SIZE:-1280x720}"
+    volumes:
+      - game-home:/home/sab
+      - game-work:/srv/game
+      - type: volume
+        source: mod-artifacts
+        target: /input/mod
+        read_only: true
+      - type: bind
+        source: "${SAB_GAME_SOURCE:?Set SAB_GAME_SOURCE to a Linux game plus SMAPI directory}"
+        target: /input/game
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      start_period: 180s
+volumes:
+  game-home:
+  game-work:
+  mod-artifacts:

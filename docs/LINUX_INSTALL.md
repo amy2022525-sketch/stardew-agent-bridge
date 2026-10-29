@@ -1,10 +1,10 @@
 # Linux 安装与首次运行
 
-本文件说明 Linux 首版的目标安装流程。当前是**源码预览**：已完成 WSL2 无游戏构建、测试和桥接包验证，尚无通过原生 Linux 游戏验收的完整玩家安装包。完整包解压步骤适用于后续完成验收的构建；目前的 `bridge-only-ci` 包不含 Mod，不应作为完整安装包使用。当前范围是原生 Linux 桌面（Steam 或自带安装器安装的星露谷）。
+0.2.0-preview.1 提供包含 Mod 与 Node 22.13.0 的完整 `linux-x64.tar.gz` 预览包，可从 [GitHub Releases](https://github.com/amy2022525-sketch/stardew-agent-bridge/releases) 下载。已完成 WSL2 无游戏构建、测试与包检查；原生 Linux 游戏加载及真实游玩仍待验收。包内 Mod 使用本机合法游戏引用编译为平台共用的 net6.0 程序集，这不证明它已在 Linux 游戏加载成功。CI 的 `bridge-only-ci` 包不含 Mod，不能替代完整安装包。当前范围是原生 Linux 桌面（Steam 或自带安装器安装的星露谷）。
 沙箱打包（Flatpak / Snap / Steam Linux Runtime 容器）不在本版验收范围内，见
 [PLATFORM_MATRIX.md](PLATFORM_MATRIX.md)。
 
-> 实际验证范围见 [LINUX_VALIDATION_REPORT.md](../LINUX_VALIDATION_REPORT.md)；后续原生游戏与完整包验收仍按 [LINUX_ACCEPTANCE.md](LINUX_ACCEPTANCE.md) 记录。
+> 当前验证见 [RELEASE_VALIDATION_20261029.md](RELEASE_VALIDATION_20261029.md)，历史结果见 [LINUX_VALIDATION_REPORT.md](../LINUX_VALIDATION_REPORT.md)；原生游戏验收仍按 [LINUX_ACCEPTANCE.md](LINUX_ACCEPTANCE.md) 记录。
 
 ## 1. 前置条件
 

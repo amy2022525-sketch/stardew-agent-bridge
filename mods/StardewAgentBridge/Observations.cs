@@ -8,6 +8,8 @@ using StardewValley.Tools;
 using StardewValley.Buildings;
 using StardewValley.Monsters;
 using StardewValley.Locations;
+using StardewModdingAPI;
+using StardewAgentBridge.Multiplayer;
 
 namespace StardewAgentBridge;
 
@@ -19,7 +21,9 @@ public sealed class Observations
     private long sequence;
     public string InstanceId { get; } = Guid.NewGuid().ToString("N");
     public int Generation { get; private set; }
-    public void Reset() { Generation++; references.Clear(); snapshots.Clear(); }
+    public Func<string?>? MultiplayerScope { get; set; }
+    private string? referenceScope;
+    public void Reset() { Generation++; references.Clear(); snapshots.Clear(); referenceScope = null; }
     public static object Tile(Point p) => new { x = p.X, y = p.Y };
     private static object? EquipmentItem(Item? item) => item == null ? null : new { itemId = item.QualifiedItemId, name = item.DisplayName };
     public static Point Position => Game1.player.TilePoint;
@@ -52,6 +56,8 @@ public sealed class Observations
     }
     public Target Resolve(string reference, bool menu = false)
     {
+        if (Context.IsMultiplayer && (!reference.StartsWith("@mp2_", StringComparison.Ordinal) || referenceScope != MultiplayerScope?.Invoke()))
+            throw new ActionFault("STALE_REF", "联机目标属于旧角色/世界/许可，请重新 snapshot。");
         if (!references.TryGetValue(reference, out var target) || target.Generation != Generation || !ReferenceEquals(target.Location, Game1.currentLocation))
             throw new ActionFault("STALE_REF", "引用不属于当前场景或已过期，请重新 snapshot。");
         if (menu)
@@ -169,11 +175,14 @@ public sealed class Observations
     {
         var location = Game1.currentLocation;
         var center = Position;
-        var id = "s" + ++sequence;
+        var id = Context.IsMultiplayer ? "mp2_" + MpIdentity.Nonce() : "s" + ++sequence;
+        var currentScope = MultiplayerScope?.Invoke();
+        if (Context.IsMultiplayer && referenceScope != currentScope) Reset();
+        referenceScope = currentScope;
         var keys = new List<string>();
         string Add(Target target, bool menu = false)
         {
-            var reference = $"@{id}:{(menu ? "m" : "e")}{keys.Count + 1}";
+            var reference = $"@{id}{(Context.IsMultiplayer ? "_" : ":")}{(menu ? "m" : "e")}{keys.Count + 1}";
             references.Add(reference, target); keys.Add(reference); return reference;
         }
         var entities = new List<object>();

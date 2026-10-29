@@ -12,9 +12,14 @@ async function stack(): Promise<Stack> {
 after(async () => { for (const value of stacks) await value.stop(); });
 
 describe('交接复核：真实并发与会话隔离', () => {
-    it('诊断预览和导出均递归移除事件中的凭据、存档与本机路径', async () => {
+    it('诊断预览和导出均递归移除事件中的凭据、存档、本机路径与联机身份', async () => {
         const s = await stack();
         s.bridge.events.publish('diagnostic_fixture', { nested: { token: s.token, note: `Bearer ${s.token} C:\\Users\\private-user\\secret.txt FixtureSave_1234567890`, localPath: s.dataDir } });
+        // 联机身份/会话字段：正常运行界面可展示，但诊断导出必须整体脱敏，避免跨机器关联真实世界、角色与会话。
+        const mpIdentity = { worldId: '392011999888777666', actorFarmerId: '9223372036854775807', hostFarmerId: '9007199254740993',
+            actorSessionId: 'nnnnnnnnnnnnnnnnnnnnnn2', hostSessionId: 'hhhhhhhhhhhhhhhhhhhhhh2', connectionId: 'cccccccccccccccccccccc2', permissionLeaseId: 'llllllllllllllllllllll2' };
+        s.bridge.events.publish('diagnostic_mp_fixture', { ...mpIdentity, actorContext: { worldId: mpIdentity.worldId, actorFarmerId: mpIdentity.actorFarmerId,
+            actorSessionId: mpIdentity.actorSessionId, connectionId: mpIdentity.connectionId } });
         const sessionResponse = await fetch(`http://127.0.0.1:${s.bridgePort}/api/v1/session`);
         const cookie = sessionResponse.headers.get('set-cookie')!.split(';')[0]!;
         const session = await sessionResponse.json() as { csrfToken: string };
@@ -23,7 +28,7 @@ describe('交接复核：真实并发与会话隔离', () => {
         assert.equal(exported.status, 200);
         const record = await exported.json() as { file: string };
         for (const payload of [await preview.text(), readFileSync(record.file, 'utf8')]) {
-            for (const secret of [s.token, 'private-user', 'FixtureSave_1234567890', s.dataDir]) assert.ok(!payload.includes(secret));
+            for (const secret of [s.token, 'private-user', 'FixtureSave_1234567890', s.dataDir, ...Object.values(mpIdentity)]) assert.ok(!payload.includes(secret));
             assert.ok(payload.includes('<redacted>'));
         }
     });

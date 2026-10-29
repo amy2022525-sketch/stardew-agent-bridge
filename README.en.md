@@ -1,6 +1,10 @@
 # Stardew Agent Bridge
 
-> Source preview (0.1.0). Updated on 2026-10-23: the Web console now includes an MCP connection panel; 51 Node tests and 11 browser checks for this feature passed. Earlier verification includes 17 isolated C# checks, 17 Windows installer checks, and selected real-game actions. Fishing/combat, the full transaction/day-transition matrix, and complete tasks through DSH/Codex/Claude Code remain incomplete. See [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md). No stable release has been published.
+**0.2.0-preview.1** includes Windows and Linux x64 packages, a standalone SMAPI Mod, and Docker amd64 images plus the source/Compose toolkit. Download the matching files and checksums from [GitHub Releases](https://github.com/amy2022525-sketch/stardew-agent-bridge/releases).
+
+Docker game mode and MP1 are previews. Native Linux gameplay and two real multiplayer clients still require acceptance; automated/mock checks do not certify those. See [current validation](docs/RELEASE_VALIDATION_20261029.md), [Docker installation](docs/DOCKER_INSTALL.md), [Linux installation](docs/LINUX_INSTALL.md), and [MP1 setup](docs/MULTIPLAYER_INSTALL.md). Windows packages require Node >=22.13; Linux packages bundle Node. Images never include proprietary game files or saves.
+
+Earlier single-player checks are recorded in [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md). Those historical checks do not certify the new Linux, Docker or multiplayer paths. Fishing/combat, the full transaction/day-transition matrix, and complete tasks through DSH/Codex/Claude Code remain incomplete. No stable release has been published.
 
 Let any local MCP-capable agent (DSH, Codex CLI, Claude Code, …) observe and play Stardew Valley through a SMAPI mod, a resident local bridge and a web console — one shared game capability set, one shared action ledger.
 
@@ -17,7 +21,7 @@ Agent host (DSH / Codex / Claude Code)
    │  standard MCP (Streamable HTTP, or the bundled stdio adapter)
    ▼
 Bridge (127.0.0.1:17655)  ← the single business core
-   ├── MCP surface: 28 `stardew_*` tools
+   ├── MCP surface: 29 `stardew_*` tools
    ├── Web console: status, timeline, host-config wizard, human takeover
    ├── Action ledger (SQLite): actionId dedup, terminal replay, unresolved actions
    └── Control: control session + lease + single writer
@@ -45,7 +49,7 @@ node scripts/smoke.mjs   # real MCP round-trip: tools/list + status + snapshot
 node apps/server/dist/cli.js hosts --host codex --transport stdio   # host config snippet
 ```
 
-In the Web console, select **MCP 连接** (MCP connection), choose DSH, Codex, Claude Code or a generic MCP client, and generate a configuration. Copy or download it, then import it into your agent. Each agent should use a distinct connection name. The panel can test HTTP and stdio by performing a real MCP handshake, discovering 28 tools and calling the read-only `stardew_status` tool. This local check is separate from agent activity: ask your agent to call a tool to see its actual call record in the panel.
+In the Web console, select **MCP 连接** (MCP connection), choose DSH, Codex, Claude Code or a generic MCP client, and generate a configuration. Copy or download it, then import it into your agent. Each agent should use a distinct connection name. The panel can test HTTP and stdio by performing a real MCP handshake, discovering 29 tools and calling the read-only `stardew_status` tool. This local check is separate from agent activity: ask your agent to call a tool to see its actual call record in the panel.
 
 ### Linux source preview (initial no-game verification completed)
 

@@ -5,6 +5,7 @@ using Microsoft.Xna.Framework.Graphics;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
+using StardewAgentBridge.Multiplayer;
 
 namespace StardewAgentBridge;
 
@@ -26,6 +27,7 @@ public sealed class ModEntry : Mod
     private ActionCoordinator actions = null!;
     private readonly Observations observations = new();
     private readonly BackgroundUpdates background = new();
+    private MultiplayerRuntime multiplayer = null!;
     private BridgeServer.Pending? screenshot;
 
     private string? cachedToken;
@@ -44,6 +46,22 @@ public sealed class ModEntry : Mod
 
         actions = new ActionCoordinator(control, Decorate);
         actions.OnError = error => Monitor.Log($"游戏动作失败：{error}", LogLevel.Error);
+        multiplayer = new MultiplayerRuntime(helper, Monitor, ModManifest.UniqueID, DataDir(), config.Multiplayer, observations,
+            () => helper.WriteConfig(config), reason => {
+                if (reason != "SCENE_CHANGED" || !actions.BeginSceneObservation())
+                    actions.Stop("RESULT_UNKNOWN", "联机会话失效：" + reason);
+                control.Takeover(); observations.Reset();
+            });
+        observations.MultiplayerScope = () => JsonSerializer.Serialize(multiplayer.Machine.Scope, Protocol.Json);
+        actions.BeforeTick = request => multiplayer.Guard(request);
+
+        if (multiplayer.Coordinator)
+        {
+            helper.Events.GameLoop.UpdateTicking += (_, _) => multiplayer.Tick();
+            helper.Events.GameLoop.ReturnedToTitle += (_, _) => multiplayer.Machine.Reset("STALE_HOST_SESSION");
+            Monitor.Log("联机主机协调模式：不启动本地角色控制端口；请用 sab_mp 管理许可。", LogLevel.Info);
+            return;
+        }
 
         try { server = new BridgeServer(config.Port, ReadModToken, (message, warn) => Monitor.Log(message, warn ? LogLevel.Warn : LogLevel.Info)); }
         catch (Exception error)
@@ -141,12 +159,21 @@ public sealed class ModEntry : Mod
 
     private void OnTick(object? sender, UpdateTickingEventArgs e)
     {
+        multiplayer.Tick();
         if (server == null) return;
+        // A normal door can begin fading before currentLocation changes. Stop all
+        // inputs now and only observe its expected landing; never run an old guard
+        // or simulate movement through the transition.
+        if (Context.IsMultiplayer && Game1.fadeToBlack && !actions.ObservingSceneTransition && actions.BeginSceneObservation())
+        {
+            multiplayer.Machine.ReleaseControl(); control.Takeover(); observations.Reset();
+        }
         background.BeforeUpdate();
 
         if (control.HolderName != null && !control.LeaseValid)
         {
             actions.Stop("CANCELLED", "控制租约到期，已停止输入。");
+            if (Context.IsMultiplayer) multiplayer.Machine.ReleaseControl();
             control.Takeover();
             control.TryOpenPauseMenu();
         }
@@ -161,6 +188,7 @@ public sealed class ModEntry : Mod
             {
                 lastWatchdogRelease = DateTime.UtcNow;
                 actions.Stop("CANCELLED", "与 Bridge 的连接中断，游戏侧已自行释放输入。");
+                if (Context.IsMultiplayer) multiplayer.Machine.ReleaseControl();
                 control.Takeover();
                 try { Game1.player?.Halt(); } catch (Exception) { }
                 control.TryOpenPauseMenu();
@@ -199,14 +227,20 @@ public sealed class ModEntry : Mod
             if (r.Command == "hello")
             {
                 pending.Peer.Handshaken = true;
-                Reply(Response.Ok(r, Hello(), control.Epoch, Elapsed()));
+                Reply(Response.Ok(r, Hello(r.Protocol ?? Protocol.Name), control.Epoch, Elapsed()));
                 return;
             }
             if (!pending.Peer.Handshaken) throw new ActionFault("PROTOCOL_MISMATCH", "需要先发送 hello 完成握手。");
+            if (r.Command == "multiplayer") { Reply(Response.Ok(r, multiplayer.Describe(Protocol.Text(r.Args, "operation")), control.Epoch, Elapsed())); return; }
+            if (r.Command == "multiplayer_bind") { Reply(Response.Ok(r, multiplayer.Bind(), control.Epoch, Elapsed())); return; }
+            multiplayer.Guard(r);
 
             if (r.Command == "control")
             {
-                Reply(Response.Ok(r, HandleControl(r), control.Epoch, Elapsed()));
+                var result = Response.Ok(r, HandleControl(r), control.Epoch, Elapsed());
+                // 控制回执携带实际确认的角色作用域，而不是回显请求里可能过期的上下文。
+                if (Context.IsMultiplayer && multiplayer.Machine.Scope is { } confirmed) result = result with { ActorContext = confirmed };
+                Reply(result);
                 return;
             }
             if (r.Command == "saves") { Reply(Response.Ok(r, LifecycleActions.ListSaves(), control.Epoch, Elapsed())); return; }
@@ -225,6 +259,7 @@ public sealed class ModEntry : Mod
             {
                 var id = r.Args.TryGetProperty("actionId", out _) ? Protocol.Text(r.Args, "actionId") : null;
                 var stopped = actions.StopIfOwned(id);
+                if (Context.IsMultiplayer && (id == null || stopped)) { multiplayer.Machine.ReleaseControl(); control.Takeover(); }
                 var paused = control.TryOpenPauseMenu();
                 var released = stopped ? new[] { "move", "tool", "mouse" } : Array.Empty<string>();
                 Reply(Response.Ok(r, new
@@ -239,8 +274,6 @@ public sealed class ModEntry : Mod
                 }, control.Epoch, Elapsed()));
                 return;
             }
-
-            if (Context.IsMultiplayer) throw new ActionFault("UNSUPPORTED", "当前只支持单人存档。");
 
             if (r.Command == "shop")
             {
@@ -276,9 +309,11 @@ public sealed class ModEntry : Mod
             actions.Start(
                 r,
                 pending.Peer,
-                started.AddMilliseconds(r.TimeoutMs),
+                multiplayer.Deadline(started.AddMilliseconds(r.TimeoutMs)),
                 () => {
+                    multiplayer.Guard(r);
                     control.ResumeOwnPause(r.Command);
+                    if (Context.IsMultiplayer && r.Command == "menu" && r.Args.TryGetProperty("operation", out var op) && op.GetString() == "open_inventory") return multiplayer.InventoryMenu();
                     return GameActions.Create(r, observations, Helper.Reflection, control);
                 },
                 response => Send(pending, response));
@@ -297,6 +332,7 @@ public sealed class ModEntry : Mod
     private object HandleControl(Request r)
     {
         var operation = Protocol.Text(r.Args, "operation");
+        multiplayer.CheckControl(operation, r.Args.TryGetProperty("mode", out var requestedMode) ? requestedMode.GetString() : null, r.Protocol, r.ActorContext);
         switch (operation)
         {
             case "acquire":
@@ -322,12 +358,14 @@ public sealed class ModEntry : Mod
                 var epoch = Protocol.Integer(r.Args, "epoch");
                 control.AuthorizeWrite(epoch);
                 var pause = Protocol.Flag(r.Args, "pause");
+                if (Context.IsMultiplayer) multiplayer.Machine.ReleaseControl();
                 actions.StopIfOwned(null);
                 control.Release(pause);
                 return new { kind = "control", epoch = control.Epoch, holderName = control.HolderName, expiresAt = (string?)null, pause = ControlAuthority.PauseState(control.SelfPauseOpened) };
             }
             case "takeover":
             {
+                if (Context.IsMultiplayer) multiplayer.Machine.ReleaseControl();
                 actions.StopIfOwned(null);
                 control.Takeover();
                 try { Game1.player?.Halt(); } catch (Exception) { }
@@ -340,7 +378,7 @@ public sealed class ModEntry : Mod
         }
     }
 
-    private object Hello()
+    private object Hello(string protocol = Protocol.Name)
     {
         var generation = observations.Generation;
         if (lastSceneGeneration != generation) lastSceneGeneration = generation;
@@ -348,7 +386,9 @@ public sealed class ModEntry : Mod
         {
             mode = "game",
             kind = "hello",
-            protocol = Protocol.Name,
+            protocol,
+            supportedProtocols = new[] { Protocol.Name, Protocol.NameV2 },
+            multiplayer = multiplayer.Machine.Status(),
             instanceId = observations.InstanceId,
             modVersion = ModManifest.Version.ToString(),
             gameVersion = Game1.GetVersionString(),
@@ -356,7 +396,10 @@ public sealed class ModEntry : Mod
             saveLoaded = Context.IsWorldReady,
             singlePlayer = !Context.IsMultiplayer,
             capabilities = Protocol.Capabilities,
-            writeCommands = Protocol.WriteCommands,
+            // 写命令按当前真实可执行口径声明：联机取 MP1 矩阵与主机政策交集，未授权/不在许可地点/非联机世界不宣称可写；
+            // 为空时给出与错误码同名的首要拒绝原因，避免 Agent 反复试错猜测。
+            writeCommands = Context.IsMultiplayer || config.Multiplayer.Enabled ? multiplayer.WriteCommands() : Protocol.WriteCommands,
+            writeCommandsReason = Context.IsMultiplayer || config.Multiplayer.Enabled ? multiplayer.WriteCommandsReason() : null,
             worldGeneration = generation,
             epoch = control.Epoch,
             controller = control.HolderName,
@@ -368,12 +411,12 @@ public sealed class ModEntry : Mod
             features = new
             {
                 cropMaturity = true,
-                shipping = true,
+                shipping = !Context.IsMultiplayer,
                 mailbox = true,
                 inventory = true,
                 realtime = true,
                 readyWaitMilliseconds = 2000,
-                stepPause = config.PauseAfterEachStep
+                stepPause = config.PauseAfterEachStep && !Context.IsMultiplayer
             }
         };
     }
@@ -391,6 +434,11 @@ public sealed class ModEntry : Mod
             if (node is JsonObject obj)
             {
                 obj["pause"] = JsonSerializer.SerializeToNode(pause, Protocol.Json);
+                if (response.ActorContext != null)
+                    obj["multiplayer"] = JsonSerializer.SerializeToNode(new { actor = response.ActorContext,
+                        confirmationScope = response.Status is "succeeded" or "partial" ? "local_observed" : "none",
+                        durability = "not_saved", resourceScope = response.Command == "use" ? "shared_world" : "actor",
+                        worldContinues = (bool?)null }, Protocol.Json);
                 return response with { Result = obj };
             }
         }
@@ -405,7 +453,7 @@ public sealed class ModEntry : Mod
 
     private void Reset(string reason)
     {
-        actions.Reset();
+        actions.Reset(retainDedup: Context.IsMultiplayer);
         observations.Reset();
         server?.InvalidateSessions();
         control.Takeover();
@@ -419,6 +467,7 @@ public sealed class ModEntry : Mod
         if (!Context.IsWorldReady) return;
         if (e.Button != config.StopHotkey) return;
         var stopped = actions.StopIfOwned(null);
+        if (Context.IsMultiplayer) multiplayer.Machine.ReleaseControl();
         control.Takeover();
         try { Game1.player?.Halt(); } catch (Exception) { }
         control.TryOpenPauseMenu();
@@ -481,6 +530,7 @@ public sealed class ModEntry : Mod
         if (disposing)
         {
             actions.Stop("CANCELLED", "Mod 正在卸载。");
+            multiplayer?.Dispose();
             background.Dispose();
             server?.Dispose();
         }
@@ -501,4 +551,5 @@ public sealed class ModConfig
     /// 先看 SAB_HOME，再按平台默认目录。相对值会被拒绝并给出明确错误，不做猜测。
     /// </summary>
     public string? DataDirectory { get; set; }
+    public MultiplayerConfig Multiplayer { get; set; } = new();
 }

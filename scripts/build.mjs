@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, copyFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { buildSync } from 'esbuild';
+import { syncSourceAssets } from './source-assets.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const checkOnly = process.argv.includes('--check-only');
@@ -26,6 +27,7 @@ function run(command, args, options = {}) {
 
 console.log('[build] TypeScript 项目引用编译…');
 run(process.execPath, [path.join(root, 'node_modules/typescript/bin/tsc'), '-b', '--pretty', 'false']);
+syncSourceAssets(root);
 
 console.log('[build] 类型检查 Web 控制台…');
 run(process.execPath, [path.join(root, 'node_modules/typescript/bin/tsc'), '-p', 'apps/web', '--noEmit', '--pretty', 'false']);

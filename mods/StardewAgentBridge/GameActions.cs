@@ -30,7 +30,14 @@ public static class GameActions
     }
     private static IGameAction CreateNow(Request request, Observations observations, IReflectionHelper reflection)
     {
-        if (request.Command == "menu") return new MenuAction(observations, observations.Resolve(Protocol.Text(request.Args, "target"), true));
+        if (request.Command == "menu")
+        {
+            if (request.Args.TryGetProperty("operation", out var operation) && operation.GetString() == "open_inventory") return new Immediate(() => {
+                if (Game1.activeClickableMenu != null) throw new ActionFault("ACTION_BUSY", "已有菜单，请先处理当前菜单。");
+                Game1.activeClickableMenu = new GameMenu(); return observations.Result("已正常打开自己的背包菜单。", false);
+            });
+            return new MenuAction(observations, observations.Resolve(Protocol.Text(request.Args, "target"), true));
+        }
         if (request.Command == "buy") return new ShopBuyAction(observations, Protocol.Text(request.Args, "itemId"), Protocol.Integer(request.Args, "count"));
         if (request.Command == "wait") return new WaitAction(observations, Protocol.Integer(request.Args, "milliseconds"));
         if (request.Command == "fish") return RealtimeActions.Create(request, observations) ?? throw new ActionFault("UNSUPPORTED", "钓鱼动作未实现。");
@@ -94,7 +101,7 @@ public static class GameActions
         public object? Tick() => DateTime.UtcNow >= end ? observations.Result("等待结束，已重新观察；未跳过剧情或修改游戏时钟。", false) : null;
         public void Cancel() { }
     }
-    private sealed class MoveAction : IGameAction
+    private sealed class MoveAction : IGameAction, ISceneTransitionAction
     {
         private readonly Observations observations;
         private readonly MovementInput input = new();
@@ -103,6 +110,12 @@ public static class GameActions
         private readonly GameLocation location = Game1.currentLocation;
         private readonly string? reference;
         private readonly bool exitGoal;
+        private readonly string? expectedDestination;
+        public bool CanObserveSceneTransition => IsExpectedScene || expectedDestination != null && ReferenceEquals(location, Game1.currentLocation) && Game1.fadeToBlack && !Game1.eventUp;
+        public bool IsExpectedScene => expectedDestination != null && !ReferenceEquals(location, Game1.currentLocation)
+            && Game1.currentLocation?.NameOrUniqueName == expectedDestination;
+        public object? ObserveSceneTransition() => !IsExpectedScene || Game1.fadeToBlack || !Game1.player.CanMove || Game1.eventUp ? null
+            : observations.Result("原生出口切图已在本地观察确认；旧控制权已释放，请重新观察并 start realtime。");
         private readonly HashSet<Point> exitTiles = new();
         private Point goal;
         private Queue<Point> path;
@@ -114,6 +127,8 @@ public static class GameActions
         {
             this.observations = observations; this.reference = reference;
             exitGoal = target?.Identity is Warp || location.warps.Any(w => w.X == tile.X && w.Y == tile.Y);
+            expectedDestination = (target?.Identity as Warp ?? location.warps.FirstOrDefault(w => w.X == tile.X && w.Y == tile.Y))?.TargetName
+                ?? Multiplayer.NativeDoor.Destination(Observations.InBounds(location, tile) ? location.doesTileHaveProperty(tile.X, tile.Y, "TouchAction", "Back") : null, touch: true);
             if (exitGoal)
             {
                 // 一段地图边界可有多个相邻 Warp；边缘端点可能在墙后，按同一出口的真实可达格寻路。
@@ -168,7 +183,7 @@ public static class GameActions
                     if (!isExit && !Observations.Walkable(location, next)) continue;
                     // 中途不经过自动切图点，交给明确的目标动作处理。
                     var touch = Observations.InBounds(location, next) ? location.doesTileHaveProperty(next.X, next.Y, "TouchAction", "Back") : null;
-                    if (!Arrived(next) && (location.warps.Any(w => w.X == next.X && w.Y == next.Y) || touch?.StartsWith("Warp", StringComparison.Ordinal) == true)) continue;
+                    if (!Arrived(next) && (location.warps.Any(w => w.X == next.X && w.Y == next.Y) || touch?.StartsWith("Warp", StringComparison.Ordinal) == true || Context.IsMultiplayer && touch != null)) continue;
                     previous[next] = current; queue.Enqueue(next);
                     if (previous.Count > 16384) throw new ActionFault("PATH_BLOCKED", "路径搜索超过范围，请选择较近目标。");
                 }
@@ -295,7 +310,7 @@ public static class GameActions
         }
         public void Cancel() { /* 不回滚已触发的游戏动画或资源消耗。 */ }
     }
-    private sealed class InteractAction : IGameAction
+    private sealed class InteractAction : IGameAction, ISceneTransitionAction
     {
         private readonly Observations observations;
         private readonly Observations.Target target;
@@ -305,6 +320,12 @@ public static class GameActions
         private readonly string priorInventory = InventoryState();
         private readonly string priorWorld = WorldState.InteractionSignature();
         private readonly bool targetExisted;
+        private readonly string? expectedDestination;
+        public bool CanObserveSceneTransition => IsExpectedScene || expectedDestination != null && ReferenceEquals(location, Game1.currentLocation) && Game1.fadeToBlack && !Game1.eventUp;
+        public bool IsExpectedScene => expectedDestination != null && !ReferenceEquals(location, Game1.currentLocation)
+            && Game1.currentLocation?.NameOrUniqueName == expectedDestination;
+        public object? ObserveSceneTransition() => !IsExpectedScene || Game1.fadeToBlack || !Game1.player.CanMove || Game1.eventUp ? null
+            : observations.Result("原生门切图已在本地观察确认；旧控制权已释放，请重新观察并 start realtime。");
         private int ticks;
         private static string InventoryState() => string.Join("|", Game1.player.Items.Select(item => item == null ? "" : $"{item.QualifiedItemId}:{item.Stack}"));
         private bool TargetExists()
@@ -324,6 +345,9 @@ public static class GameActions
         public InteractAction(Observations observations, Observations.Target target)
         {
             this.observations = observations; this.target = target; targetExisted = TargetExists();
+            expectedDestination = target.Identity is Warp warp ? warp.TargetName
+                : target.Kind == "door" && target.Identity is StardewValley.Buildings.Building building ? building.GetIndoorsName()
+                : Multiplayer.NativeDoor.Destination(location.doesTileHaveProperty(target.Tile.X, target.Tile.Y, "Action", "Buildings"));
             if (target.Kind == "action" && target.Action == "Sleep") throw new ActionFault("USE_MOVE", "睡觉确认由 TouchAction 触发：请移动到 Sleep 格，而非 interact。");
             if (target.Identity is BedFurniture bed)
             {

@@ -1,6 +1,6 @@
 {
   "name": "@sab/game-client",
-  "version": "0.1.0",
+  "version": "0.2.0-preview.1",
   "private": true,
   "description": "Bridge ↔ SMAPI Mod 本机 WebSocket 连接、握手、心跳与请求路由。",
   "type": "module",

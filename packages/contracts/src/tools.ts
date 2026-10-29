@@ -83,6 +83,13 @@ const SLOT_PROP = (max: number, what = '背包槽位') => ({
 
 export const TOOLS: readonly ToolSpec[] = [
     {
+        name: 'stardew_multiplayer', title: '联机状态与主机政策',
+        description: '只读查询联机身份、连接、当前角色政策或公开玩家概要。真人主机需安装 coordinator Mod 并允许该 farmhand；控制必须显式 mode=realtime。停止 AI 不会暂停全世界，未知动作不能重试。此工具不能批准自己、入房、踢玩家或保存主机世界。',
+        command: 'multiplayer', kind: 'read',
+        inputSchema: readSchema({ operation: { type: 'string', enum: ['status', 'players', 'policy', 'connection'] } }, ['operation']),
+        annotations: annotations('联机状态与政策', true)
+    },
+    {
         name: 'stardew_doctor',
         title: '诊断连接与版本',
         description:
@@ -133,7 +140,9 @@ export const TOOLS: readonly ToolSpec[] = [
             '读取 Bridge 侧状态：当前控制者与会话、在途动作、未决动作、最近收据、暂停结果、账本可写性与 Mod 连接。用于返回丢失后核对，不会重新执行任何消费动作。',
         command: 'bridge:status',
         kind: 'read',
-        inputSchema: readSchema({ actionId: { type: 'string', pattern: ACTION_ID_PATTERN, description: '查询该动作的原收据；不重放动作。' } }),
+        inputSchema: { ...readSchema({ actionId: { type: 'string', pattern: ACTION_ID_PATTERN, description: '查询该动作的原收据；不重放动作。' },
+            worldId: { type: 'string', minLength: 1, maxLength: 100 }, actorFarmerId: { type: 'string', pattern: '^-?(0|[1-9][0-9]*)$', maxLength: 20 } }),
+            dependencies: { worldId: ['actorFarmerId'], actorFarmerId: ['worldId'] } },
         annotations: annotations('读取控制与动作状态', true)
     },
     {
@@ -201,7 +210,9 @@ export const TOOLS: readonly ToolSpec[] = [
             '选择当前快照给出的真实菜单选项（对话、信件、结算、升级等）。引用来自 snapshot 的 menu.options，且菜单内容变化后失效（MENU_MISMATCH）。不跳过剧情，不代替用户关闭菜单。',
         command: 'menu',
         kind: 'write',
-        inputSchema: writeSchema({ target: TARGET_PROP('菜单选项') }, ['target']),
+        inputSchema: { ...writeSchema({ target: TARGET_PROP('菜单选项'), operation: { type: 'string', enum: ['click', 'open_inventory'] } }),
+            oneOf: [{ required: ['target'], properties: { operation: { enum: ['click'] } } },
+                { required: ['operation'], properties: { operation: { const: 'open_inventory' } }, not: { required: ['target'] } }] },
         annotations: annotations('选择菜单选项', false)
     },
     {

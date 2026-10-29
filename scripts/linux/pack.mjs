@@ -26,6 +26,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { buildSync } from 'esbuild';
 import { checkNodeVersion, inspectElfHeader } from '@sab/platform';
+import { collectLicenses } from '../collect-licenses.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..', '..');
@@ -258,6 +259,7 @@ export function main(argv) {
     // 2) server 与 stdio 适配器（单文件）
     esbuild(path.join(REPO, 'apps', 'server', 'src', 'cli.ts'), path.join(outDir, 'server', 'bridge.mjs'));
     esbuild(path.join(REPO, 'adapters', 'stdio', 'src', 'index.ts'), path.join(outDir, 'server', 'stdio-adapter.mjs'));
+    collectLicenses(outDir, REPO);
 
     // 3) Web
     for (const file of walk(path.join(REPO, 'apps', 'web', 'dist'))) {
@@ -299,7 +301,7 @@ export function main(argv) {
         const source = path.join(REPO, name);
         if (existsSync(source)) copyFileSync(source, path.join(outDir, name));
     }
-    for (const name of ['LINUX_INSTALL.md', 'LINUX_DEVELOPMENT.md', 'LINUX_ACCEPTANCE.md', 'PLATFORM_MATRIX.md', 'PROTOCOL.md', 'CLIENTS.md', 'AGENT_GUIDE.md', 'ACCEPTANCE.md', 'TROUBLESHOOTING.md']) {
+    for (const name of ['LINUX_INSTALL.md', 'LINUX_DEVELOPMENT.md', 'LINUX_ACCEPTANCE.md', 'PLATFORM_MATRIX.md', 'PROTOCOL.md', 'CLIENTS.md', 'AGENT_GUIDE.md', 'ACCEPTANCE.md', 'TROUBLESHOOTING.md', 'MULTIPLAYER_INSTALL.md', 'MULTIPLAYER_ACCEPTANCE.md', 'DOCKER_INSTALL.md', 'RELEASE_VALIDATION_20261029.md']) {
         const source = path.join(REPO, 'docs', name);
         if (existsSync(source)) copyFileSync(source, path.join(outDir, 'docs', name));
     }

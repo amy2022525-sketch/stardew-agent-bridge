@@ -21,6 +21,17 @@
     </header>
 
     <main>
+        <section class="card docker-card hidden" id="docker-card" data-testid="docker-card">
+            <h2>Docker 容器状态</h2>
+            <p class="docker-title" id="docker-title" data-testid="docker-title"></p>
+            <p class="hint" id="docker-detail" data-testid="docker-detail"></p>
+            <dl class="grid" id="docker-grid" data-testid="docker-grid"></dl>
+            <div class="actions" id="docker-actions">
+                <a id="btn-desktop" class="button-link hidden" href="#" target="_blank" rel="noopener noreferrer" data-testid="btn-desktop">打开游戏桌面</a>
+            </div>
+            <p class="hint">桌面通道仅供人工查看；截图与游戏观察始终来自游戏 Mod。桌面可用不代表游戏已载入或 Agent 已接入。</p>
+        </section>
+
         <section class="card" id="status-card">
             <h2>连接与状态</h2>
             <dl class="grid" id="status-grid" data-testid="status-grid"></dl>
@@ -81,11 +92,21 @@
             <p id="mcp-clients-empty" class="hint">尚无 Agent 调用记录。导入配置后，让 Agent 读取一次状态。</p>
         </section>
 
+        <section class="card hidden" id="multiplayer-card" data-testid="multiplayer-card">
+            <h2>联机角色与主机许可</h2>
+            <dl class="grid" id="multiplayer-grid" data-testid="multiplayer-grid"></dl>
+            <p class="hint">先通过游戏原生 Co-op 加入自己的农场工，再绑定当前角色。绑定后仍需真人主机在本地批准。联机世界会继续运行。</p>
+            <div class="actions"><button id="btn-bind-actor" type="button" data-testid="bind-actor">绑定当前世界与我的农场工</button></div>
+            <pre class="mono" id="multiplayer-policy" data-testid="multiplayer-policy"></pre>
+            <p class="notice" id="multiplayer-notice" role="status" aria-live="polite"></p>
+        </section>
+
         <section class="card" id="control-card">
             <h2>控制权</h2>
             <dl class="grid" id="control-grid"></dl>
             <div class="actions">
-                <button id="btn-start" type="button" class="primary">开始控制（分步）</button>
+                <label for="control-mode">控制模式 <select id="control-mode" data-testid="control-mode"><option value="step">单人分步</option><option value="realtime">实时（世界继续运行）</option></select></label>
+                <button id="btn-start" type="button" class="primary">开始控制</button>
                 <button id="btn-takeover" type="button" class="danger">人工接管</button>
                 <button id="btn-end" type="button">结束控制</button>
                 <button id="btn-stop" type="button">停止动作</button>

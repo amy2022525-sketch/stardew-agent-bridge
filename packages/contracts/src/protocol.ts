@@ -5,9 +5,10 @@
  * 修改破坏兼容的字段必须提升 CONTRACTS_SCHEMA_VERSION 与/或 MOD_PROTOCOL 版本。
  */
 
+import type { ActorContext, MultiplayerStatus, MultiplayerReceiptDetail } from './multiplayer.js';
 export const CONTRACTS_SCHEMA_VERSION = 1;
 export const BRIDGE_NAME = 'stardew-agent-bridge';
-export const BRIDGE_VERSION = '0.1.0';
+export const BRIDGE_VERSION = '0.2.0-preview.1';
 export const MOD_PROTOCOL = 'stardew-agent-bridge/1';
 export const MOD_PROTOCOL_VERSION = 1;
 
@@ -65,7 +66,7 @@ export type NextAction =
 export type ToolKind = 'read' | 'write' | 'control' | 'mixed';
 
 /** 目标引用格式，由 Mod 生成并校验：`@s<snapshotSeq>:<e|m><index>`。 */
-export const TARGET_REF_PATTERN = '^@s[0-9]{1,9}:[em][0-9]{1,4}$';
+export const TARGET_REF_PATTERN = '^(?:@s[0-9]{1,9}:[em][0-9]{1,4}|@mp2_[A-Za-z0-9_-]{22}_[em][0-9]{1,4})$';
 export const ACTION_ID_PATTERN = '^[A-Za-z0-9_-]{1,80}$';
 export const SAVE_ID_PATTERN = '^[A-Za-z0-9 ._@()-]{1,80}$';
 
@@ -82,7 +83,7 @@ export interface ModFault {
 
 export interface ModRequest {
     op: 'request';
-    protocol: typeof MOD_PROTOCOL;
+    protocol: typeof MOD_PROTOCOL | 'stardew-agent-bridge/2';
     requestId: string;
     command: string;
     args: Record<string, unknown>;
@@ -91,6 +92,7 @@ export interface ModRequest {
     actionId?: string;
     /** 当前控制权代次；写动作必须与 Mod 持有的代次一致。 */
     epoch?: number;
+    actorContext?: ActorContext;
 }
 
 export type ModResponseStatus = 'succeeded' | 'partial' | 'failed' | 'cancelled' | 'unknown';
@@ -104,6 +106,7 @@ export interface ModResponse {
     actionId?: string;
     epoch?: number;
     elapsedMs?: number;
+    actorContext?: ActorContext | null;
 }
 
 export interface ModEvent {
@@ -126,6 +129,8 @@ export interface ModHello {
     saveLoaded: boolean;
     worldGeneration: number;
     singlePlayer: boolean;
+    supportedProtocols?: string[];
+    multiplayer?: MultiplayerStatus;
     capabilities: string[];
     writeCommands: string[];
     epoch: number;
@@ -204,6 +209,7 @@ export interface ActionReceipt {
     /** 给文字模型的紧凑摘要，一行内说明结果与下一步。 */
     summary: string;
     reconciliation: ReconciliationRecord[];
+    multiplayer?: MultiplayerReceiptDetail;
 }
 
 // ---------------------------------------------------------------------------
@@ -234,9 +240,12 @@ export interface ControlSessionInfo {
     closedAt: string | null;
     closeReason: string | null;
     checkpoint: Checkpoint | null;
+    actorContext?: ActorContext | null;
 }
 
 export interface ModLinkStatus {
+    singlePlayer?: boolean;
+    multiplayer?: MultiplayerStatus;
     connected: boolean;
     protocol: string | null;
     instanceId: string | null;
@@ -302,6 +311,7 @@ export interface BridgeStatus {
 
 /** 紧凑快照摘要（Web 与 MCP 文字输出共用）。 */
 export interface SnapshotSummary {
+    multiplayer?: { actorContext: ActorContext | null; observationScope: 'local_actor_and_visible_world'; worldClock: 'not_globally_paused' };
     snapshotId: string;
     instanceId: string;
     worldGeneration: number;

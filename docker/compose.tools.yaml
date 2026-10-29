@@ -1,0 +1,71 @@
+services:
+  maintenance:
+    profiles: [tools]
+    image: "${SAB_IMAGE_PREFIX:-local/stardew-agent-bridge}:bridge-runtime"
+    platform: linux/amd64
+    init: true
+    user: "${SAB_UID:-1000}:${SAB_GID:-1000}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    entrypoint: [/usr/local/bin/node, /opt/sab/container/lease-entrypoint.mjs, --entry, maintenance, --]
+    command: [backup-list, --json]
+    environment:
+      SAB_PROJECT: "${COMPOSE_PROJECT_NAME}"
+      SAB_RUN_MODE: bridge
+      SAB_HOME: /var/lib/sab
+      HOME: /tmp/sab-home
+    volumes:
+      - sab-data:/var/lib/sab
+      - game-home:/home/sab
+      - game-work:/srv/game
+      - mod-artifacts:/input/mod:ro
+      - backups:/var/backups/sab
+    tmpfs:
+      - "/tmp:rw,nosuid,nodev,mode=1777"
+      - "/run/sab:rw,nosuid,nodev,uid=${SAB_UID:-1000},gid=${SAB_GID:-1000},mode=0700"
+  maintenance-game:
+    extends:
+      service: maintenance
+    environment:
+      SAB_RUN_MODE: game
+    volumes:
+      - type: bind
+        source: "${SAB_GAME_SOURCE:-/sab-input-not-configured}"
+        target: /input/game
+        read_only: true
+        bind:
+          create_host_path: false
+  mod-build:
+    profiles: [tools]
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.mod-build
+      args:
+        SAB_UID: "${SAB_UID:-1000}"
+        SAB_GID: "${SAB_GID:-1000}"
+    image: "${SAB_IMAGE_PREFIX:-local/stardew-agent-bridge}:mod-build"
+    platform: linux/amd64
+    init: true
+    user: "${SAB_UID:-1000}:${SAB_GID:-1000}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      SAB_PROJECT: "${COMPOSE_PROJECT_NAME}"
+      SAB_RUN_MODE: game
+    volumes:
+      - mod-artifacts:/input/mod
+      - type: bind
+        source: "${SAB_GAME_SOURCE:-/sab-input-not-configured}"
+        target: /input/game
+        read_only: true
+        bind:
+          create_host_path: false
+    tmpfs:
+      - "/tmp:rw,nosuid,nodev,mode=1777"
+volumes:
+  game-home:
+  game-work:
+  mod-artifacts:
+  backups:

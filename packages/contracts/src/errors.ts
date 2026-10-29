@@ -13,6 +13,24 @@ export interface ErrorCodeSpec {
 }
 
 export const ERROR_CODES = {
+    MULTIPLAYER_DISABLED: { message: '联机功能尚未启用。', effectKnown: true, nextAction: 'fix_environment' },
+    HOST_COORDINATOR_REQUIRED: { message: '需要兼容的真人主机协调 Mod。', effectKnown: true, nextAction: 'fix_environment' },
+    HOST_PERMISSION_REQUIRED: { message: '主机尚未授予当前角色许可。', effectKnown: true, nextAction: 'wait' },
+    HOST_PERMISSION_EXPIRED: { message: '主机许可已到期，请重新检查政策和控制会话。', effectKnown: true, nextAction: 'restart_control' },
+    HOST_PERMISSION_REVOKED: { message: '主机已撤销许可。', effectKnown: true, nextAction: 'restart_control' },
+    ACTOR_BINDING_REQUIRED: { message: '请先在本机 Web 绑定真实世界和自己的农场工。', effectKnown: true, nextAction: 'fix_environment' },
+    ACTOR_MISMATCH: { message: '角色不匹配。', effectKnown: true, nextAction: 'observe' },
+    STALE_ACTOR_SESSION: { message: '角色或连接代次已改变，旧请求已失效。', effectKnown: true, nextAction: 'restart_control' },
+    STALE_HOST_SESSION: { message: '主机会话已改变。', effectKnown: true, nextAction: 'restart_control' },
+    FARMHAND_REQUIRED: { message: '联机首版需要独立农场工客户端。', effectKnown: true, nextAction: 'fix_environment' },
+    HOST_REQUIRED: { message: '此操作只能由真人主机在本地执行。', effectKnown: true, nextAction: 'none' },
+    SPLIT_SCREEN_UNSUPPORTED: { message: '联机首版尚不支持分屏。', effectKnown: true, nextAction: 'none' },
+    UNSUPPORTED_IN_MULTIPLAYER: { message: '当前操作未在联机首版开放。', effectKnown: true, nextAction: 'none' },
+    REALTIME_REQUIRED: { message: '联机控制需要显式 mode=realtime。', effectKnown: true, nextAction: 'restart_control' },
+    MODE_UNSUPPORTED: { message: '当前游戏模式不支持该控制模式。', effectKnown: true, nextAction: 'restart_control' },
+    WORLD_TRANSITION: { message: '世界正在保存或切日，请等待并重新观察。', effectKnown: true, nextAction: 'wait' },
+    SCENE_CHANGED: { message: '角色已换图，请重新观察与获取控制。', effectKnown: true, nextAction: 'restart_control' },
+    AMBIGUOUS_ACTION_ID: { message: '该动作标识对应多个作用域，请指定世界和角色。', effectKnown: true, nextAction: 'query_action' },
     GAME_UNAVAILABLE: {
         message: '游戏或 SMAPI Mod 未连接：请确认星露谷已通过 SMAPI 启动，并已加载桥接 Mod。',
         effectKnown: true,

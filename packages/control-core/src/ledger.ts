@@ -9,15 +9,18 @@
  * 终态缓存可以淘汰，墓碑不会。
  */
 import { DatabaseSync } from 'node:sqlite';
-import { BridgeError, buildReceipt, makeFault, type ActionReceipt, type ActionStatus, type Checkpoint, type SessionMode, type SessionState } from '@sab/contracts';
+import { chmodSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { BridgeError, buildReceipt, makeFault, isActorContext, type ActorContext, type ActionReceipt, type ActionStatus, type Checkpoint, type SessionMode, type SessionState } from '@sab/contracts';
 
-export const LEDGER_SCHEMA_VERSION = 1;
+export const LEDGER_SCHEMA_VERSION = 2;
 
 export interface LedgerLogger {
     (level: 'debug' | 'info' | 'warn' | 'error', message: string, meta?: Record<string, unknown>): void;
 }
 
 export interface ActionRow {
+    actorContext?: ActorContext;
     dedupKey: string;
     actionId: string;
     signature: string;
@@ -33,6 +36,7 @@ export interface ActionRow {
 }
 
 export interface RecordIntentInput {
+    actorContext?: ActorContext;
     dedupKey: string;
     actionId: string;
     signature: string;
@@ -59,6 +63,7 @@ export interface LedgerEvent {
 }
 
 export interface SessionRow {
+    actorContext?: ActorContext | null;
     controlSessionId: string;
     clientId: string;
     clientName: string;
@@ -92,19 +97,21 @@ export class ActionLedger {
     writable = false;
     lastError: string | null = null;
     schemaVersion = 0;
+    backupPath: string | null = null;
 
     constructor(path: string, options: { limit?: number; logger?: LedgerLogger } = {}) {
         this.logger = options.logger;
         this.limit = options.limit ?? 65_536;
         try {
             this.db = new DatabaseSync(path);
-            this.db.exec('PRAGMA journal_mode = WAL;');
             this.db.exec('PRAGMA synchronous = FULL;');
-            this.migrate();
+            this.migrate(path);
+            this.db.exec('PRAGMA journal_mode = WAL;');
             this.writable = true;
         } catch (error) {
             this.lastError = error instanceof Error ? error.message : String(error);
             this.logger?.('error', `动作账本不可用：${this.lastError}`, { path });
+            try { this.db?.close(); } catch { /* keep original error */ }
             this.db = null;
             this.writable = false;
         }
@@ -117,9 +124,24 @@ export class ActionLedger {
         return this.db;
     }
 
-    private migrate(): void {
+    private migrate(path: string): void {
         const db = this.db;
         if (!db) return;
+        const meta = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='meta'").get();
+        const previous = meta ? db.prepare("SELECT value FROM meta WHERE key='schema_version'").get() as SqlRow | undefined : undefined;
+        const version = previous ? Number(previous.value) : 0;
+        if (!Number.isSafeInteger(version) || version < 0 || version > LEDGER_SCHEMA_VERSION) throw new Error('Unsupported ledger schema; migration refused.');
+        if (version === 0 && db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='actions'").get()) throw new Error('Unversioned existing ledger; migration refused.');
+        if (version === 1 && path !== ':memory:') {
+            const backup = `${path}.pre-mp-v2.${Date.now()}-${randomUUID()}.sqlite`;
+            // VACUUM INTO includes committed WAL data and produces a consistent snapshot.
+            db.prepare('VACUUM INTO ?').run(backup);
+            if (process.platform !== 'win32') chmodSync(backup, 0o600);
+            this.backupPath = backup;
+            this.logger?.('info', '账本 v1 升级前的一致性备份已创建', { backupPath: backup });
+        }
+        db.exec('BEGIN IMMEDIATE');
+        try {
         db.exec(`
             CREATE TABLE IF NOT EXISTS meta (
                 key TEXT PRIMARY KEY,
@@ -168,10 +190,21 @@ export class ActionLedger {
                 payload TEXT
             );
         `);
+        for (const table of ['actions', 'sessions']) {
+            const columns = new Set((db.prepare(`PRAGMA table_info(${table})`).all() as SqlRow[]).map(r => r.name));
+            if (!columns.has('actor_context')) db.exec(`ALTER TABLE ${table} ADD COLUMN actor_context TEXT`);
+            if (table === 'actions') {
+                if (!columns.has('world_id')) db.exec('ALTER TABLE actions ADD COLUMN world_id TEXT');
+                if (!columns.has('actor_farmer_id')) db.exec('ALTER TABLE actions ADD COLUMN actor_farmer_id TEXT');
+            }
+        }
+        db.exec('CREATE INDEX IF NOT EXISTS actions_actor_scope ON actions(client_id, world_id, actor_farmer_id, action_id)');
         db.prepare('INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
             .run('schema_version', String(LEDGER_SCHEMA_VERSION));
         const row = db.prepare('SELECT value FROM meta WHERE key = ?').get('schema_version') as SqlRow | undefined;
         this.schemaVersion = asNumber(row?.value);
+        db.exec('COMMIT');
+        } catch (error) { db.exec('ROLLBACK'); throw error; }
     }
 
     countActions(): number {
@@ -202,8 +235,8 @@ export class ActionLedger {
         }
         db.prepare(
             `INSERT INTO actions (dedup_key, action_id, signature, command, client_id, control_session_id,
-                game_instance_id, world_generation, status, intent_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'accepted', ?)`
+                game_instance_id, world_generation, status, intent_at, actor_context, world_id, actor_farmer_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'accepted', ?, ?, ?, ?)`
         ).run(
             input.dedupKey,
             input.actionId,
@@ -213,7 +246,10 @@ export class ActionLedger {
             input.controlSessionId,
             input.gameInstanceId,
             input.worldGeneration,
-            input.intentAt
+            input.intentAt,
+            input.actorContext ? JSON.stringify(input.actorContext) : null,
+            input.actorContext?.worldId ?? null,
+            input.actorContext?.actorFarmerId ?? null
         );
     }
 
@@ -245,11 +281,16 @@ export class ActionLedger {
         }
     }
 
-    recent(limit = 20, clientId?: string): ActionReceipt[] {
+    private readScope(clientId?: string, actor?: Pick<ActorContext, 'worldId' | 'actorFarmerId'>): { sql: string; params: string[] } {
+        const clauses: string[] = [], params: string[] = [];
+        if (clientId) { clauses.push('client_id = ?'); params.push(clientId); }
+        if (actor) { clauses.push('world_id = ? AND actor_farmer_id = ?'); params.push(actor.worldId, actor.actorFarmerId); }
+        return { sql: clauses.length ? ` AND ${clauses.join(' AND ')}` : '', params };
+    }
+    recent(limit = 20, clientId?: string, actor?: Pick<ActorContext, 'worldId' | 'actorFarmerId'>): ActionReceipt[] {
         if (!this.db) return [];
-        const rows = clientId
-            ? (this.db.prepare('SELECT receipt FROM actions WHERE receipt IS NOT NULL AND client_id = ? ORDER BY intent_at DESC LIMIT ?').all(clientId, limit) as SqlRow[])
-            : (this.db.prepare('SELECT receipt FROM actions WHERE receipt IS NOT NULL ORDER BY intent_at DESC LIMIT ?').all(limit) as SqlRow[]);
+        const scope = this.readScope(clientId, actor);
+        const rows = this.db.prepare(`SELECT receipt FROM actions WHERE receipt IS NOT NULL${scope.sql} ORDER BY intent_at DESC LIMIT ?`).all(...scope.params, limit) as SqlRow[];
         const out: ActionReceipt[] = [];
         for (const row of rows) {
             const raw = asString(row.receipt);
@@ -263,28 +304,37 @@ export class ActionLedger {
         return out;
     }
 
-    findById(actionId: string): ActionReceipt | null {
+    findById(actionId: string, clientId?: string, actor?: Pick<ActorContext, 'worldId' | 'actorFarmerId'>): ActionReceipt | null {
         if (!this.db) return null;
-        const row = this.db.prepare('SELECT * FROM actions WHERE action_id = ? ORDER BY intent_at DESC LIMIT 1').get(actionId) as SqlRow | undefined;
+        const scope = this.readScope(clientId, actor);
+        const rows = this.db.prepare(`SELECT * FROM actions WHERE action_id = ?${scope.sql} ORDER BY intent_at DESC LIMIT 2`).all(actionId, ...scope.params) as SqlRow[];
+        if (rows.length > 1) throw new BridgeError('AMBIGUOUS_ACTION_ID', '同一 actionId 有多个作用域，请指定世界和角色查询。');
+        const row = rows[0];
         return row ? this.receiptOrUnresolved(row) : null;
     }
 
     /** 结果不明（unknown）的动作，供 status 提示调用者先核对。 */
-    unresolved(limit = 20): ActionReceipt[] {
+    unresolved(limit = 20, clientId?: string, actor?: Pick<ActorContext, 'worldId' | 'actorFarmerId'>): ActionReceipt[] {
         if (!this.db) return [];
-        const rows = this.db.prepare("SELECT * FROM actions WHERE receipt IS NULL OR status IN ('unknown','accepted','running') ORDER BY intent_at DESC LIMIT ?").all(limit) as SqlRow[];
+        const scope = this.readScope(clientId, actor);
+        const rows = this.db.prepare(`SELECT * FROM actions WHERE (receipt IS NULL OR status IN ('unknown','accepted','running'))${scope.sql} ORDER BY intent_at DESC LIMIT ?`).all(...scope.params, limit) as SqlRow[];
         return rows.map(row => this.receiptOrUnresolved(row));
     }
 
     private receiptOrUnresolved(row: SqlRow): ActionReceipt {
         const action = this.mapRow(row);
-        return action.receipt ?? buildReceipt({
+        const receipt = action.receipt ?? buildReceipt({
             actionId: action.actionId, clientId: action.clientId, controlSessionId: action.controlSessionId,
             gameInstanceId: action.gameInstanceId, worldGeneration: action.worldGeneration < 0 ? null : action.worldGeneration,
             sceneGeneration: null, command: action.command, status: 'unknown', verified: false, effectKnown: false,
             startedAt: action.intentAt, finishedAt: null, nextAction: 'query_action',
             error: makeFault('RESULT_UNKNOWN', '已记录派发意图，尚无最终收据；不能据此判定未生效，也不能重放。', { effectKnown: false })
         });
+        if (!action.receipt && action.actorContext) {
+            receipt.schemaVersion = 2;
+            receipt.multiplayer = { actor: action.actorContext, confirmationScope: 'none', durability: 'unknown', resourceScope: action.command === 'use' ? 'shared_world' : 'actor', worldContinues: null };
+        }
+        return receipt;
     }
 
     saveSession(session: SessionRow): void {
@@ -293,13 +343,13 @@ export class ActionLedger {
             this.requireDb()
                 .prepare(
                     `INSERT INTO sessions (control_session_id, client_id, client_name, state, mode, lease_epoch,
-                        game_instance_id, world_generation, started_at, last_activity_at, expires_at, closed_at, close_reason, checkpoint)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        game_instance_id, world_generation, started_at, last_activity_at, expires_at, closed_at, close_reason, checkpoint, actor_context)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                      ON CONFLICT(control_session_id) DO UPDATE SET
                         state = excluded.state, mode = excluded.mode, lease_epoch = excluded.lease_epoch,
                         game_instance_id = excluded.game_instance_id, world_generation = excluded.world_generation,
                         last_activity_at = excluded.last_activity_at, expires_at = excluded.expires_at,
-                        closed_at = excluded.closed_at, close_reason = excluded.close_reason, checkpoint = excluded.checkpoint`
+                        closed_at = excluded.closed_at, close_reason = excluded.close_reason, checkpoint = excluded.checkpoint, actor_context = excluded.actor_context`
                 )
                 .run(
                     session.controlSessionId,
@@ -315,7 +365,8 @@ export class ActionLedger {
                     session.expiresAt,
                     session.closedAt,
                     session.closeReason,
-                    session.checkpoint ? JSON.stringify(session.checkpoint) : null
+                    session.checkpoint ? JSON.stringify(session.checkpoint) : null,
+                    session.actorContext ? JSON.stringify(session.actorContext) : null
                 );
         } catch (error) {
             this.logger?.('warn', `保存控制会话失败：${error instanceof Error ? error.message : String(error)}`);
@@ -361,6 +412,7 @@ export class ActionLedger {
             }
         }
         return {
+            actorContext: (() => { try { const actor: unknown = JSON.parse(asString(row.actor_context) ?? 'null'); return isActorContext(actor) ? actor : undefined; } catch { return undefined; } })(),
             dedupKey: asString(row.dedup_key) ?? '',
             actionId: asString(row.action_id) ?? '',
             signature: asString(row.signature) ?? '',

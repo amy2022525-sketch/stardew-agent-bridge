@@ -176,6 +176,6 @@ stdio（宿主只支持子进程；令牌从数据根读取，不写进配置）
 | Claude Code | stdio / HTTP | 模板已交付，待验证 | 配置片段见 §3 |
 | 其他 MCP 客户端 | HTTP | 通用模板可用，待验证 | 需要支持 Bearer 头或可用 stdio |
 
-Linux 上的宿主接入与 Windows 完全同构（同样的 28 个工具、同样的错误码），差异只是包内路径与数据根：
+Linux 上的宿主接入与 Windows 完全同构（本版 29 个工具，新增只读 stardew_multiplayer），差异只是包内路径与数据根：
 见 [LINUX_INSTALL.md](LINUX_INSTALL.md) 与 [PLATFORM_MATRIX.md](PLATFORM_MATRIX.md)。
 本表"待验证"的行必须由原协作者在真实宿主上执行 §7 的短任务后才能改为通过。

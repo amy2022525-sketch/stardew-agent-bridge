@@ -15,6 +15,8 @@ import { acquireInstanceLock, isInstanceLockStale, readInstanceLock } from './in
 import { dataPaths, resolveDataRootDescriptor, type DataPaths } from './paths.js';
 
 export interface EndpointInfo {
+    publicBaseUrl?: string;
+    publicMcpUrl?: string;
     port: number;
     mcpUrl?: string | undefined;
     pid?: number | undefined;

@@ -1,6 +1,16 @@
 # Stardew Agent Bridge
 
-> 0.1.0 源码预览。2026-10-23：Web 新增 MCP 连接面板，51 项 Node 测试和 11 项 MCP 浏览器检查通过。此前 17 项隔离 C# 检查、17 项安装脚本检查及部分真实游戏动作已有证据；钓鱼/战斗、完整消费与跨日流程、三个真实宿主仍有待验收项。完整结果见 [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md)，尚未发布稳定版 Release。
+> **0.2.0-preview.1**：Windows / Linux x64 原生包、独立 Mod、Docker amd64 镜像与源码工具包。Docker 与联机 MP1 为预览功能；真实 Linux 游戏与双客户端联机仍待实机验收。当前验证见 [RELEASE_VALIDATION_20261029.md](docs/RELEASE_VALIDATION_20261029.md)，历史单人验收见 [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md)。
+
+下载：[GitHub Releases](https://github.com/amy2022525-sketch/stardew-agent-bridge/releases)。每版提供校验和，按平台选取，不需要下载全部镜像。
+
+| 发行包 | 用途 | 安装说明 |
+| --- | --- | --- |
+| Windows x64 ZIP | Bridge + Web + Mod；需 Node >=22.13 | 本页快速开始与包内启动说明 |
+| Linux x64 tar.gz | 自带 Node，Bridge + Web + Mod | [Linux 安装](docs/LINUX_INSTALL.md) |
+| Mod ZIP | 两个平台通用的 net6.0 Mod 程序集；需合法游戏/SMAPI | [原生安装](docs/LINUX_INSTALL.md)、[联机安装](docs/MULTIPLAYER_INSTALL.md) |
+| Docker 三个镜像归档 | Bridge / 图形游戏环境 / Mod 编译工具，按需加载 | [Docker 安装](docs/DOCKER_INSTALL.md) |
+| Docker source ZIP | Compose、管理脚本、完整公开源码，可本地重建镜像 | [Docker 开发](docs/DOCKER_DEVELOPMENT.md) |
 >
 > 2026-10-24：Linux 源码预览已完成首轮验证：Ubuntu 24.04 / WSL2 的 136 项 Node 测试、20 项安装/恢复测试、19 项无游戏便携包检查通过。原生 Linux 游戏、图形浏览器、具体 Agent 短任务和完整安装包仍待验收；当前更新不代表稳定版 Linux Release。详见 [LINUX_VALIDATION_REPORT.md](LINUX_VALIDATION_REPORT.md) 与 [平台矩阵](docs/PLATFORM_MATRIX.md)。
 
@@ -19,7 +29,7 @@ Agent 宿主（DSH / Codex / Claude Code）
    │  标准 MCP（Streamable HTTP，或 stdio 适配器）
    ▼
 Bridge 常驻进程（127.0.0.1:17655）           ← 唯一业务核心 control-core
-   ├── MCP 工具面（28 个 stardew_* 工具）
+   ├── MCP 工具面（29 个 stardew_* 工具）
    ├── Web 控制台（状态 / 时间线 / 配置向导 / 人工接管）
    ├── 动作账本（SQLite：actionId 去重、终态缓存、未决动作）
    └── 控制权（控制会话 + 租约 + 写者独占）
@@ -105,7 +115,7 @@ npm run doctor
 
 完整步骤见 [docs/LINUX_INSTALL.md](docs/LINUX_INSTALL.md)，规则与代码边界见 [docs/LINUX_DEVELOPMENT.md](docs/LINUX_DEVELOPMENT.md)，平台差异见 [docs/PLATFORM_MATRIX.md](docs/PLATFORM_MATRIX.md)。
 
-## 3. 工具面（28 个）
+## 3. 工具面（29 个）
 
 | 类别 | 工具 | 说明 |
 | --- | --- | --- |
@@ -113,6 +123,7 @@ npm run doctor
 | 只读 | `stardew_snapshot`、`stardew_inspect` | 结构化世界快照（含作物成熟、地图出口、菜单选项）；单个目标详情 |
 | 只读 | `stardew_screenshot` | 真实画面 PNG（同时返回结构化提示，便于无视觉能力模型使用） |
 | 只读 | `stardew_shop`、`stardew_recipes`、`stardew_saves` | 货架/价格/`itemId`、已知配方与材料、可加载存档 |
+| 只读 | `stardew_multiplayer` | 联机状态/在线玩家/主机政策/连接（operation=status/players/policy/connection）；仅联机世界有意义，不含审批或绑定入口 |
 | 写 | `stardew_move`、`stardew_select`、`stardew_use`、`stardew_interact` | 寻路到格子或目标附近；选背包槽；对相邻目标使用工具/种子；正常交互 |
 | 写 | `stardew_menu`、`stardew_closemenu`、`stardew_pause`、`stardew_wait` | 选择对话/邮件/结算菜单项；从正常入口关菜单；打开暂停菜单；有界等待 |
 | 写 | `stardew_buy`、`stardew_ship`、`stardew_container` | 购买（按 `itemId`+数量）、投放出货箱、箱子存取 |

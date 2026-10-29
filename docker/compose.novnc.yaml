@@ -1,0 +1,15 @@
+services:
+  runtime:
+    environment:
+      SAB_DESKTOP_ENABLED: "true"
+      SAB_NOVNC_PORT: "${SAB_NOVNC_PORT:-6080}"
+      SAB_DESKTOP_BASE_URL: "${SAB_DESKTOP_BASE_URL:-}"
+      SAB_VNC_PASSWORD_FILE: /run/secrets/sab_vnc_password
+    ports:
+      - "127.0.0.1:${SAB_NOVNC_PORT:-6080}:6080"
+    secrets:
+      - source: sab_vnc_password
+        target: sab_vnc_password
+secrets:
+  sab_vnc_password:
+    file: "${SAB_VNC_PASSWORD_PATH:?Set a private VNC password file readable by the container UID}"

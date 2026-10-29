@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "note": "容器基础组件版本与核对来源。本文件记录的是**编写时核对到的上游事实**，不代表已在 Docker 中实测通过。",
+  "verifiedAt": "2026-10-24",
+  "verifiedAgainst": {
+    "debianBookwormPackageIndex": {
+      "url": "https://deb.debian.org/debian/dists/bookworm/main/binary-amd64/Packages.gz",
+      "method": "下载索引并按 ^Package: <name>$ 精确匹配",
+      "result": {
+        "novnc": "present",
+        "websockify": "present",
+        "python3-websockify": "present",
+        "xvfb": "present",
+        "x11vnc": "present",
+        "openbox": "present"
+      }
+    },
+    "novncUpstreamTarball": {
+      "url": "https://github.com/novnc/noVNC/archive/refs/tags/v1.5.0.tar.gz",
+      "sha256": "6a73e41f98388a5348b7902f54b02d177cb73b7e5eb0a7a0dcf688cc2c79b42a",
+      "sizeBytes": 706843,
+      "note": "备用方案：若改用上游 tarball 而不是发行版包，必须以上面的 sha256 校验（编写时实际下载并计算过）。"
+    }
+  },
+  "components": {
+    "node": {
+      "image": "node:22.13.0-bookworm-slim",
+      "minimum": "22.13.0",
+      "reason": "项目使用 node:sqlite；22.13 起不再需要 --experimental-sqlite，且 engines 要求 >=22.13.0。",
+      "source": "仓库 package.json engines + packages/platform/src/runtime.ts"
+    },
+    "baseOs": { "image": "debian:bookworm-slim（随 node 镜像）", "libc": "glibc 2.36" },
+    "flock": {
+      "package": "util-linux",
+      "usedFor": "跨容器卷租约（--no-fork -n -E 13）",
+      "source": "https://man7.org/linux/man-pages/man2/flock.2.html ; https://github.com/util-linux/util-linux/blob/master/sys-utils/flock.1.adoc"
+    },
+    "display": {
+      "packages": ["xvfb", "x11vnc", "novnc", "websockify", "openbox", "xauth"],
+      "usedFor": "虚拟显示 + 可选浏览器桌面",
+      "unverified": "运行时行为（Mesa 渲染、OpenAL 音频、分辨率切换）未实测"
+    },
+    "graphicsLibs": {
+      "packages": ["libgl1", "libglx-mesa0", "libegl1", "libglu1-mesa", "libsdl2-2.0-0", "libopenal1", "libopenal-data", "libfontconfig1", "libfreetype6"],
+      "usedFor": "MonoGame DesktopGL 运行依赖（SDL2 / OpenGL / OpenAL）",
+      "source": "https://github.com/MonoGame/docs.monogame.github.io/blob/main/articles/getting_started/platforms.md"
+    },
+    "dotnet": {
+      "note": "运行时镜像**不安装** .NET 运行时：游戏与 SMAPI 由用户在 Linux 侧自备（SMAPI Linux 版通常自带运行时）。这是刻意的不确定性边界——见 DOCKER_HANDOVER_REPORT 第 7 节。",
+      "modTargetFramework": "net6.0",
+      "modMinimumSmapi": "4.5.2",
+      "source": "mods/StardewAgentBridge/StardewAgentBridge.csproj + manifest.json"
+    },
+    "modBuildSdk": {
+      "image": "mcr.microsoft.com/dotnet/sdk:8.0.415-bookworm-slim",
+      "amd64ManifestDigest": "sha256:29d3b5f7a3c1e9979d512a50dfd80e75f8d93505e805b0e10bf0b76987ced9ac",
+      "digestSource": "2026-10-24 docker manifest inspect（多平台 manifest 的 amd64 子清单）",
+      "note": "Mod 仍以 net6.0 为目标框架；SDK 8 编译 net6.0 需要 targeting pack，真实编译尚未验收。"
+    },
+    "compose": {
+      "minimumVersion": "2.24.0",
+      "syntax": "Compose V2（无 version: 字段；不使用 !override 等未核对特性）"
+    }
+  },
+  "ports": {
+    "modInternal": 17654,
+    "bridgeInternal": 17655,
+    "gatewayInternal": 17656,
+    "vncInternal": 5900,
+    "websockifyInternal": 6081,
+    "novncInternal": 6080
+  },
+  "buildVerification": {
+    "verifiedAt": "2026-10-24",
+    "bridgeRuntime": "WSL Ubuntu Docker 29.9.2 实机构建成功；镜像内容（server/container 布局）、UID 1000、/opt/sab 只读、健康检查 healthy、18055 映射 /container/live、MCP HTTP initialize（SSE）、stdio initialize、无令牌 401 均实测通过。",
+    "gameRuntime": "见本轮进度记录；真实图形/游戏行为未验收。",
+    "modBuild": "见本轮进度记录；真实 Mod 编译未验收。"
+  },
+  "licenses": {
+    "note": "镜像内会复制本仓库 LICENSE 与 NOTICE.md；发行版包与 noVNC/websockify 遵循各自许可证，发布前需按 docker/README.md 的清单复核。"
+  }
+}

@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { syncSourceAssets } from './source-assets.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 
@@ -16,6 +17,7 @@ function run(command, args) {
 }
 
 run(process.execPath, [path.join(root, 'node_modules/typescript/bin/tsc'), '-b', '--pretty', 'false']);
+syncSourceAssets(root);
 
 const testDir = path.join(root, 'tests', 'dist', 'src');
 if (!existsSync(testDir)) {

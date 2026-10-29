@@ -15,7 +15,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { createToolServer, type ToolExecutor, type ToolResult } from '@sab/mcp';
-import { getTool } from '@sab/contracts';
+import { BRIDGE_VERSION, getTool } from '@sab/contracts';
 import { currentPlatformId, installShutdownHooks, readJsonIfExists, resolveDataRoot } from '@sab/platform';
 
 interface EndpointFile {
@@ -69,7 +69,7 @@ function resolveClient(): Resolved {
             path.join(root, 'credentials.json')
         );
         const clients = credentials?.clients;
-        const entry = clients?.[clientId] ?? clients?.['stdio'] ?? null;
+        const entry = clients?.[clientId] ?? null;
         token = typeof entry?.token === 'string' ? entry.token : null;
     }
     return { url, token, clientId, dataRoot: root, problem: null };
@@ -169,7 +169,7 @@ function main(): void {
     writeStderr(`已启动，目标 Bridge=${resolved.url} clientId=${resolved.clientId} 数据根=${resolved.dataRoot || '(未确定)'}`);
     const handle = serveStdio(() =>
         createToolServer({
-            serverInfo: { name: 'stardew-agent-bridge-stdio', version: '0.1.0' },
+            serverInfo: { name: 'stardew-agent-bridge-stdio', version: BRIDGE_VERSION },
             executor,
             resolveContext: () => ({ clientId: resolved.clientId, clientName: `stdio:${resolved.clientId}`, transport: 'stdio' }),
             logger: (level, message, meta) => writeStderr(`${level} ${message}${meta ? ` ${JSON.stringify(meta)}` : ''}`)

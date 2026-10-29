@@ -10,6 +10,7 @@ import {
     type InventoryEntry,
     type SnapshotSummary
 } from './protocol.js';
+import { isActorContext } from './multiplayer.js';
 
 type Raw = Record<string, unknown>;
 
@@ -141,6 +142,8 @@ export function normalizeSnapshot(rawInput: unknown, ctx: NormalizeContext): Sna
         : null;
 
     return {
+        multiplayer: asRaw(raw.multiplayer) ? { actorContext: isActorContext(asRaw(raw.multiplayer)?.actor) ? asRaw(raw.multiplayer)!.actor as import('./multiplayer.js').ActorContext : null,
+            observationScope: 'local_actor_and_visible_world', worldClock: 'not_globally_paused' } : undefined,
         snapshotId: str(raw.snapshotId) ?? 's0',
         instanceId: str(raw.instanceId) ?? 'unknown',
         worldGeneration: num(raw.saveGeneration) ?? 0,

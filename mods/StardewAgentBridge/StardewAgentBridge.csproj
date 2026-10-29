@@ -6,7 +6,7 @@
     <PlatformTarget>x64</PlatformTarget>
     <AssemblyName>StardewAgentBridge</AssemblyName>
     <RootNamespace>StardewAgentBridge</RootNamespace>
-    <Version>0.1.0</Version>
+    <Version>0.2.0-preview.1</Version>
     <LangVersion>latest</LangVersion>
     <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
     <GamePath Condition="'$(GamePath)' == ''">$(STARDEW_GAME_PATH)</GamePath>

@@ -32,6 +32,11 @@ import { createToolServer } from '@sab/mcp';
 import { PRIVATE_FILE_MODE, atomicWriteFile, processIdentityOfCurrentProcess, readJsonIfExists } from '@sab/platform';
 import { AuthStore, loadConfig, type BridgeConfig } from './config.js';
 import { ClientRegistry } from './clients.js';
+import {
+    parsePublicBaseUrl,
+    publicMcpUrl,
+    type PublicBaseUrlParts
+} from './container-addresses.js';
 import { generateHostConfig, HOST_LABELS, HOST_SUPPORT_MATRIX, type HostId, type TransportMode } from './hosts.js';
 import {
     isLoopback,
@@ -87,6 +92,18 @@ export class Bridge {
     private endpointOwned = false;
     private mcpCheckRunning = false;
     private readonly mcpChecks: Partial<Record<TransportMode, McpConnectionCheck>> = {};
+    /** 容器部署的外部展示地址；非 Docker 启动为 null（保持原回环输出）。 */
+    private readonly publicBase: PublicBaseUrlParts | null = null;
+
+    /** 展示/配置导出用的 MCP 地址：容器模式用公共地址，否则沿用内部回环。 */
+    private displayMcpUrl(): string {
+        return this.publicBase ? publicMcpUrl(this.publicBase) : `http://127.0.0.1:${this.boundPort}/mcp`;
+    }
+
+    /** 展示用 Web 根地址。 */
+    private displayWebUrl(): string {
+        return this.publicBase ? `${this.publicBase.baseUrl}/` : `http://127.0.0.1:${this.boundPort}/`;
+    }
 
     constructor(options: BridgeOptions = {}) {
         this.server = options.httpServer ?? null;
@@ -95,6 +112,11 @@ export class Bridge {
         ensureDirs(this.paths);
 
         this.config = { ...loadConfig(this.paths), ...(options.configOverride ?? {}) };
+        // 容器模式：config.json 可选的 publicBaseUrl 通过严格校验后才生效；
+        // 非法值直接拒绝启动（容器预检本应更早拦截，这里是最后防线）。
+        if (typeof this.config.publicBaseUrl === 'string' && this.config.publicBaseUrl.length > 0) {
+            this.publicBase = parsePublicBaseUrl(this.config.publicBaseUrl);
+        }
         this.auth = new AuthStore(this.paths);
         this.logger =
             options.logger ??
@@ -209,20 +231,27 @@ export class Bridge {
         this.mod.connect();
         this.boundPort = port;
         const identity = processIdentityOfCurrentProcess();
-        const endpoint = {
+        const endpoint: Record<string, unknown> = {
             schemaVersion: CONTRACTS_SCHEMA_VERSION,
             bridgeVersion: BRIDGE_VERSION,
             port,
+            // 内部定位字段保持原语义：容器内 stdio/健康复用继续使用回环地址。
             mcpUrl: `http://127.0.0.1:${port}/mcp`,
             pid: process.pid,
             processStart: identity.startTime,
             dataRoot: this.paths.root,
             startedAt: this.startedAt
         };
+        // 容器模式新增兼容字段：旧消费者忽略新字段，不受影响。
+        if (this.publicBase) {
+            endpoint['publicBaseUrl'] = this.publicBase.baseUrl;
+            endpoint['publicMcpUrl'] = publicMcpUrl(this.publicBase);
+        }
         // endpoint 是私人状态：原子写、0600，且只在本次实例确实监听成功后写入。
         atomicWriteFile(this.paths.endpoint, `${JSON.stringify(endpoint, null, 2)}\n`, { mode: PRIVATE_FILE_MODE });
         this.endpointOwned = true;
         this.logger.info(`Bridge 已监听 http://127.0.0.1:${port}/ （MCP: /mcp, Web: /）`);
+        if (this.publicBase) this.logger.info(`外部展示地址：${this.publicBase.baseUrl}/ （MCP: ${publicMcpUrl(this.publicBase)}）`);
         this.events.publish('bridge_started', { port, pid: process.pid });
         return port;
     }
@@ -276,6 +305,7 @@ export class Bridge {
                     bridgeVersion: BRIDGE_VERSION,
                     contractsSchemaVersion: CONTRACTS_SCHEMA_VERSION,
                     modConnected: this.mod.connected,
+                    modInstanceId: this.mod.hello?.instanceId ?? null,
                     modVersion: this.mod.hello?.modVersion ?? null,
                     gameVersion: this.mod.hello?.gameVersion ?? null,
                     smapiVersion: this.mod.hello?.smapiVersion ?? null,
@@ -472,7 +502,7 @@ export class Bridge {
 
         const requireWeb = (): boolean => {
             if (!hasSession) {
-                sendJson(res, 401, makeFault('AUTH_FAILED', '需要网页会话：请打开 http://127.0.0.1:' + this.boundPort + '/ 。'));
+                sendJson(res, 401, makeFault('AUTH_FAILED', `需要网页会话：请打开 ${this.displayWebUrl()} 。`));
                 return false;
             }
             if (needsSession && req.headers['x-sab-csrf'] !== this.csrfToken) {
@@ -492,6 +522,17 @@ export class Bridge {
         }
 
         if (!requireWeb()) return;
+
+        if (pathname === '/api/v1/multiplayer' && method === 'GET') {
+            const result = await this.actions.executeTool('stardew_multiplayer', { operation: 'status' }, { clientId: 'web', clientName: 'Web 控制台', transport: 'web' });
+            sendJson(res, 200, result); return;
+        }
+        if (pathname === '/api/v1/multiplayer/bind' && method === 'POST') {
+            if (this.control.activeSession) { sendJson(res, 409, makeFault('CONTROL_BUSY', '请先结束当前控制会话，再绑定当前角色。')); return; }
+            const response = await this.mod.request('multiplayer_bind', {}, { timeoutMs: 5000, isWrite: false });
+            sendJson(res, response.status === 'succeeded' ? 200 : 409, response.status === 'succeeded' ? { ok: true, multiplayer: response.result } : response.error);
+            return;
+        }
 
         if (method === 'GET' && pathname === '/api/v1/events') {
             const since = Number(url.searchParams.get('since') ?? '0');
@@ -521,12 +562,20 @@ export class Bridge {
 
         if (method === 'GET' && pathname === '/api/v1/receipt') {
             const actionId = url.searchParams.get('actionId') ?? '';
-            const receipt = this.actions.resolveReceipt(actionId);
-            if (!receipt) {
-                sendJson(res, 404, makeFault('NOT_FOUND', '没有该 actionId 的收据。'));
-                return;
+            const worldId = url.searchParams.get('worldId'); const actorFarmerId = url.searchParams.get('actorFarmerId');
+            if ((worldId === null) !== (actorFarmerId === null)) { sendJson(res, 400, makeFault('INVALID_ARGUMENT', 'worldId 与 actorFarmerId 必须同时提供。')); return; }
+            try {
+                const receipt = this.actions.resolveReceipt(actionId, worldId !== null && actorFarmerId !== null ? { worldId, actorFarmerId } : undefined);
+                if (!receipt) {
+                    sendJson(res, 404, makeFault('NOT_FOUND', '没有该 actionId 的收据。'));
+                    return;
+                }
+                sendJson(res, 200, { receipt });
+            } catch (error) {
+                // 多作用域 actionId 是可恢复的查询问题：返回结构化错误与补充作用域的指引，而不是通用 500。
+                if (error instanceof BridgeError && error.fault.code === 'AMBIGUOUS_ACTION_ID') { sendJson(res, 409, error.fault); return; }
+                throw error;
             }
-            sendJson(res, 200, { receipt });
             return;
         }
 
@@ -555,7 +604,11 @@ export class Bridge {
 
         if (method === 'GET' && pathname === '/api/v1/mcp') {
             sendJson(res, 200, {
-                url: `http://127.0.0.1:${this.boundPort}/mcp`, toolCount: TOOLS.length,
+                // 展示给用户的地址：容器模式为公共映射地址；stdio/内部自检仍走回环。
+                url: this.displayMcpUrl(), toolCount: TOOLS.length,
+                container: this.publicBase
+                    ? { mode: 'docker', publicBaseUrl: this.publicBase.baseUrl, note: 'stdio 配置由宿主 mcp-config 工具生成；Web 不能假造本机路径。' }
+                    : null,
                 clients: this.presence().filter(client => (client.transport === 'http' || client.transport === 'stdio') && client.clientId !== MCP_CHECK_CLIENT_ID && client.toolCalls > 0),
                 checks: this.mcpChecks
             });
@@ -617,10 +670,12 @@ export class Bridge {
                 clientId,
                 clientName: HOST_LABELS[host],
                 token: credential.token,
-                bridgeUrl: `http://127.0.0.1:${this.boundPort}/mcp`,
+                // HTTP 传输用公共展示地址；容器模式的 stdio 不在这里生成宿主路径。
+                bridgeUrl: this.displayMcpUrl(),
                 stdioAdapterPath: resolveStdioAdapter(),
                 nodeExecutable: process.execPath,
-                dataDir: this.paths.root
+                dataDir: this.paths.root,
+                containerMode: this.publicBase !== null
             });
             sendJson(res, 200, { snippet, matrix: HOST_SUPPORT_MATRIX, clientId, token: credential.token });
             return;

@@ -4,3 +4,4 @@ export * from './tools.js';
 export * from './validate.js';
 export * from './receipt.js';
 export * from './snapshot.js';
+export * from './multiplayer.js';

@@ -11,8 +11,13 @@
     <Compile Include="../../mods/StardewAgentBridge/ActionCoordinator.cs" Link="ActionCoordinator.cs" />
     <Compile Include="../../mods/StardewAgentBridge/Protocol.cs" Link="Protocol.cs" />
     <Compile Include="../../mods/StardewAgentBridge/PlatformPaths.cs" Link="PlatformPaths.cs" />
+    <Compile Include="../../mods/StardewAgentBridge/Multiplayer/Contracts.cs" Link="Multiplayer/Contracts.cs" />
+    <Compile Include="../../mods/StardewAgentBridge/Multiplayer/SessionMachine.cs" Link="Multiplayer/SessionMachine.cs" />
+    <Compile Include="../../mods/StardewAgentBridge/Multiplayer/NativeDoor.cs" Link="Multiplayer/NativeDoor.cs" />
+    <Compile Include="../../mods/StardewAgentBridge/Multiplayer/PrivatePolicyFile.cs" Link="Multiplayer/PrivatePolicyFile.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="../fixtures/platform-paths.json" Link="fixtures/platform-paths.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../fixtures/multiplayer-identities.json" Link="fixtures/multiplayer-identities.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

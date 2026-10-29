@@ -5,9 +5,10 @@
  * 游戏内行为必须另行实机验收（见 docs/EVIDENCE.md）。
  */
 import { WebSocketServer, type WebSocket } from 'ws';
-import { MOD_PROTOCOL } from '@sab/contracts';
+import { MOD_PROTOCOL, MOD_PROTOCOL_V2, type ActorContext, type MultiplayerStatus } from '@sab/contracts';
 
 export interface MockRequestRecord {
+    actorContext?: ActorContext;
     command: string;
     args: Record<string, unknown>;
     actionId?: string;
@@ -19,6 +20,8 @@ export interface MockBehaviorResult {
     status: 'succeeded' | 'partial' | 'failed' | 'cancelled' | 'unknown';
     result?: unknown;
     error?: { code: string; message: string; effectKnown?: boolean; nextAction?: string };
+    /** 覆盖响应回显的角色上下文：null 模拟缺失，其他值模拟错误角色；不设置则回显请求值。 */
+    responseActorContext?: ActorContext | null;
     /** 延迟后再应答，用于超时/取消场景。 */
     delayMs?: number;
     /** 直接断开连接，用于崩溃窗口场景。 */
@@ -48,6 +51,7 @@ export class MockMod {
     private handlers = new Map<string, MockHandler>();
     private pendingAction: PendingAction | null = null;
     readonly requests: MockRequestRecord[] = [];
+    multiplayer: MultiplayerStatus | null = null;
     epoch = 1;
     holder: string | null = null;
     pauseState: 'paused' | 'running' | 'blocked' | 'unknown' = 'running';
@@ -152,7 +156,7 @@ export class MockMod {
             return;
         }
         if (frame['op'] !== 'request') return;
-        if (frame['protocol'] !== MOD_PROTOCOL) {
+        if (frame['protocol'] !== (this.multiplayer ? MOD_PROTOCOL_V2 : MOD_PROTOCOL)) {
             socket.send(
                 JSON.stringify({
                     op: 'response',
@@ -169,6 +173,7 @@ export class MockMod {
             actionId: typeof frame['actionId'] === 'string' ? frame['actionId'] : undefined,
             epoch: typeof frame['epoch'] === 'number' ? frame['epoch'] : undefined,
             receivedAt: Date.now()
+            ,actorContext: frame['actorContext'] as ActorContext | undefined
         };
         this.requests.push(record);
 
@@ -208,6 +213,7 @@ export class MockMod {
                 actionId: record.actionId ?? null,
                 epoch: this.epoch,
                 elapsedMs: 1
+                ,actorContext: 'responseActorContext' in outcome ? outcome.responseActorContext ?? null : record.actorContext ?? null
             })
         );
     }
@@ -222,6 +228,8 @@ export class MockMod {
                 return { status: 'succeeded', result: this.handleStop() };
             case 'snapshot':
                 return { status: 'succeeded', result: this.snapshot() };
+            case 'multiplayer': return { status: 'succeeded', result: this.multiplayer };
+            case 'multiplayer_bind': return { status: 'succeeded', result: this.multiplayer };
             case 'screenshot':
                 return {
                     status: 'succeeded',
@@ -253,14 +261,16 @@ export class MockMod {
         return {
             mode: 'game',
             kind: 'hello',
-            protocol: MOD_PROTOCOL,
+            protocol: this.multiplayer ? MOD_PROTOCOL_V2 : MOD_PROTOCOL,
+            supportedProtocols: this.multiplayer ? [MOD_PROTOCOL_V2, MOD_PROTOCOL] : [MOD_PROTOCOL],
+            multiplayer: this.multiplayer ?? undefined,
             instanceId: this.instanceId,
             worldGeneration: this.worldGeneration,
             modVersion: '0.1.0',
             gameVersion: '1.6.15',
             smapiVersion: '4.5.2',
             saveLoaded: this.saveLoaded,
-            singlePlayer: true,
+            singlePlayer: !this.multiplayer,
             capabilities: this.options.capabilities,
             writeCommands: ['move', 'select', 'use', 'interact', 'menu', 'buy', 'pause', 'closemenu', 'wait'],
             epoch: this.epoch,
@@ -336,6 +346,7 @@ export class MockMod {
                     : { changed: true },
             pause: { state: 'paused', menuType: 'GameMenu', selfOpened: true },
             snapshot: this.snapshot()
+            ,multiplayer: this.multiplayer ? { actor: record.actorContext, confirmationScope: 'local_observed', durability: 'not_saved', resourceScope: record.command === 'use' ? 'shared_world' : 'actor', worldContinues: null } : undefined
         };
     }
 

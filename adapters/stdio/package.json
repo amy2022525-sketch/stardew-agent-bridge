@@ -1,6 +1,6 @@
 {
   "name": "@sab/stdio-adapter",
-  "version": "0.1.0",
+  "version": "0.2.0-preview.1",
   "private": true,
   "description": "stdio MCP 适配器：把只能启动子进程的宿主连接到同一个常驻 Bridge。",
   "type": "module",

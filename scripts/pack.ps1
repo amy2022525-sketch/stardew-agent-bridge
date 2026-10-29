@@ -43,6 +43,8 @@ $adapterOut = Join-Path $out 'server\stdio-adapter.mjs'
 if ($LASTEXITCODE -ne 0) { throw 'server 打包失败。' }
 & node node_modules/esbuild/bin/esbuild adapters/stdio/src/index.ts --bundle --platform=node --format=esm --target=node22 "--outfile=$adapterOut" "--banner:js=$banner" --log-level=warning | Out-Host
 if ($LASTEXITCODE -ne 0) { throw 'stdio 适配器打包失败。' }
+& node scripts/collect-licenses.mjs $out | Out-Host
+if ($LASTEXITCODE -ne 0) { throw '依赖许可证收集失败。' }
 
 Write-Host '[pack] 复制 Web 产物…'
 Copy-Item (Join-Path $repo 'apps\web\dist\*') (Join-Path $out 'web') -Recurse -Force
@@ -62,13 +64,14 @@ foreach ($doc in @('README.md', 'README.en.md', 'LICENSE', 'NOTICE.md', 'CHANGEL
     $source = Join-Path $repo $doc
     if (Test-Path $source) { Copy-Item $source $out }
 }
-foreach ($doc in @('ACCEPTANCE.md', 'AGENT_GUIDE.md', 'CLIENTS.md', 'PROTOCOL.md', 'EVIDENCE.md', 'MIGRATION.md', 'TROUBLESHOOTING.md')) {
+foreach ($doc in @('ACCEPTANCE.md', 'AGENT_GUIDE.md', 'CLIENTS.md', 'PROTOCOL.md', 'EVIDENCE.md', 'MIGRATION.md', 'TROUBLESHOOTING.md', 'MULTIPLAYER_INSTALL.md', 'MULTIPLAYER_ACCEPTANCE.md', 'DOCKER_INSTALL.md', 'PLATFORM_MATRIX.md', 'RELEASE_VALIDATION_20261029.md')) {
     $source = Join-Path $repo "docs\$doc"
     if (Test-Path $source) { Copy-Item $source (Join-Path $out 'docs') }
 }
 
 @'
-启动（Windows，需 Node.js 22.5 或更高版本）：
+启动（Windows，需 Node.js 22.13 或更高版本）：
+  双击 Start-Bridge.cmd，启动服务并打开网页。
   node server\bridge.mjs start
 然后打开 http://127.0.0.1:17655/ 查看控制台，在“MCP 连接”里生成、复制或下载宿主配置，并检测 HTTP/stdio 通道。
 
@@ -78,6 +81,19 @@ foreach ($doc in @('ACCEPTANCE.md', 'AGENT_GUIDE.md', 'CLIENTS.md', 'PROTOCOL.md
   powershell -ExecutionPolicy Bypass -File .\install-mod.ps1 -GamePath "<游戏目录>"
   powershell -ExecutionPolicy Bypass -File .\rollback-mod.ps1 -GamePath "<游戏目录>"
 '@ | Set-Content (Join-Path $out '启动说明.txt') -Encoding UTF8
+
+@'
+@echo off
+setlocal
+where node >nul 2>nul
+if errorlevel 1 (
+  echo Please install Node.js 22.13 or later, then run this file again.
+  pause
+  exit /b 1
+)
+node "%~dp0server\bridge.mjs" launch
+if errorlevel 1 pause
+'@ | Set-Content (Join-Path $out 'Start-Bridge.cmd') -Encoding ASCII
 
 Copy-Item (Join-Path $PSScriptRoot 'install-mod.ps1') $out -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $PSScriptRoot 'rollback-mod.ps1') $out -ErrorAction SilentlyContinue

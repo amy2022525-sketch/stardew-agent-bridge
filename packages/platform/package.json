@@ -1,6 +1,6 @@
 {
   "name": "@sab/platform",
-  "version": "0.1.0",
+  "version": "0.2.0-preview.1",
   "private": true,
   "description": "跨平台路径、权限、进程归属与桌面入口辅助；不依赖 server、MCP 或游戏控制核心。",
   "type": "module",

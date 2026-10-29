@@ -11,6 +11,8 @@ import { randomUUID } from 'node:crypto';
 import {
     BridgeError,
     LEASE_TTL_MS,
+    actorSessionKey,
+    isActorContext,
     type Checkpoint,
     type ControlSessionInfo,
     type ControlStatus,
@@ -108,6 +110,8 @@ export class ControlManager {
     }
 
     private async acquire(options: StartOptions): Promise<ControlSessionInfo> {
+        const multiplayer = this.mod.hello?.singlePlayer === false;
+        if (multiplayer && options.mode !== 'realtime') throw new BridgeError('REALTIME_REQUIRED', '联机世界不会随本地菜单暂停；请显式使用 mode=realtime。');
         const mode: SessionMode = options.mode ?? 'step';
         const leaseExpiresAt = new Date(this.now() + this.leaseTtlMs).toISOString();
         // 先由 Mod 确认新代次；只有拿到 epoch 才认为控制权交接完成。
@@ -141,8 +145,10 @@ export class ControlManager {
             closedAt: null,
             closeReason: null,
             checkpoint: null,
+            actorContext: multiplayer && isActorContext(result.actorContext) ? { ...result.actorContext } : undefined,
             renewAt: this.now() + 60_000
         };
+        if (multiplayer && !session.actorContext) throw new BridgeError('PROTOCOL_MISMATCH', '联机控制回执缺少有效角色上下文。');
         this.sessions.set(session.controlSessionId, session);
         this.activeId = session.controlSessionId;
         this.updatePauseFrom(control.pause);
@@ -331,6 +337,11 @@ export class ControlManager {
         this.updatePauseFrom(hello.pause);
         this.bindWorld(hello.instanceId, hello.worldGeneration ?? null);
         const holder = this.activeId ? this.sessions.get(this.activeId) : undefined;
+        if (holder?.state === 'active' && holder.actorContext && (!hello.multiplayer?.permissionLeaseHeld
+            || actorSessionKey(holder.actorContext) !== actorSessionKey(hello.multiplayer?.actorContext))) {
+            void this.closeSession(holder, 'multiplayer_context_changed', { revokeMod: false });
+            return;
+        }
         if (holder?.state === 'active' && hello.epoch > holder.leaseEpoch) {
             void this.closeSession(holder, 'mod_control_changed', { revokeMod: false });
         }
@@ -386,7 +397,8 @@ export class ControlManager {
             expiresAt: session.expiresAt,
             closedAt: session.closedAt,
             closeReason: session.closeReason,
-            checkpoint: session.checkpoint
+            checkpoint: session.checkpoint,
+            actorContext: session.actorContext ? { ...session.actorContext } : undefined
         };
     }
 

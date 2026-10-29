@@ -1,5 +1,8 @@
 import { redactPath, type DataPaths } from './paths.js';
 
+/** 诊断导出中需要整体替换的键：凭据类 + 联机身份/会话类（正常运行界面仍可展示非秘密身份）。 */
+const sensitiveKey = /token|secret|password|authorization|^saveId$|^worldId$|SessionId$|ConnectionId$|permissionLeaseId$|FarmerId$/i;
+
 /** Redact nested diagnostic payloads before previewing or writing them. */
 export function redactDiagnostics(value: unknown, paths: DataPaths): unknown {
     if (typeof value === 'string') return redactPath(value, paths)
@@ -10,7 +13,7 @@ export function redactDiagnostics(value: unknown, paths: DataPaths): unknown {
     if (Array.isArray(value)) return value.map(item => redactDiagnostics(item, paths));
     if (value && typeof value === 'object') return Object.fromEntries(
         Object.entries(value).map(([key, item]) => [key,
-            /token|secret|password|authorization|^saveId$/i.test(key) ? '<redacted>' : redactDiagnostics(item, paths)])
+            sensitiveKey.test(key) ? '<redacted>' : redactDiagnostics(item, paths)])
     );
     return value;
 }

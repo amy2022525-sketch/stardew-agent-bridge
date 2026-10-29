@@ -76,11 +76,11 @@ describe('HTTP MCP', () => {
         await new Promise(resolve => setTimeout(resolve, 800));
     });
 
-    it('暴露 28 个工具，名称与契约一致', async () => {
+    it('暴露 29 个工具，名称与契约一致', async () => {
         const s = await stack();
         const client = await httpClient(s);
         const { tools } = await client.listTools();
-        assert.equal(tools.length, 28);
+        assert.equal(tools.length, 29);
         const names = tools.map((tool) => tool.name).sort();
         assert.ok(names.includes('stardew_snapshot'));
         assert.ok(names.includes('stardew_session'));

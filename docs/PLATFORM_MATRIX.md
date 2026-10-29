@@ -1,6 +1,6 @@
 # 平台支持矩阵
 
-本表区分源码实现与实际验收。Linux 当前结果来自 Ubuntu 24.04 / WSL2 的无游戏测试，不能推定原生 Linux 游戏已通过。完整记录见 [LINUX_VALIDATION_REPORT.md](../LINUX_VALIDATION_REPORT.md)，未覆盖项继续按 [LINUX_ACCEPTANCE.md](LINUX_ACCEPTANCE.md) 验收。
+本表区分源码实现与实际验收。当前发行版为 0.2.0-preview.1，验证见 [RELEASE_VALIDATION_20261029.md](RELEASE_VALIDATION_20261029.md)。Linux/Docker 无游戏验证不能代替真实游戏，MP1 双客户端仍待验收。
 
 ## 1. 总览
 
@@ -9,7 +9,7 @@
 | 常驻 Bridge（本地 HTTP MCP） | 支持 | WSL2 无游戏验证通过 | 只监听 `127.0.0.1` |
 | stdio 适配器 | 支持 | WSL2 真实协议往返通过 | 与 HTTP 共享同一业务核心 |
 | Web 控制台 | 支持 | API 检查通过；图形交互待验 | 无框架静态页；可配对/复制配置 |
-| 28 个 `stardew_*` 工具 | 支持 | 工具发现/模拟契约通过；实际玩法待验 | 工具面与协议语义不变 |
+| 29 个 `stardew_*` 工具 | 支持 | 工具发现/模拟契约通过；实际玩法待验 | 新增只读 stardew_multiplayer |
 | Mod（SMAPI） | 支持 | 已实现；原生游戏加载待验 | `net6.0`，同一份源码 |
 | 数据根解析 | `%LOCALAPPDATA%` | XDG | 见 [LINUX_DEVELOPMENT.md](LINUX_DEVELOPMENT.md) §2 |
 | 单实例锁 | 支持 | WSL2 八进程竞争检查通过 | Linux 用 `/proc` 校验启动身份，防 PID 复用 |
@@ -18,7 +18,7 @@
 | Mod 安装事务 + journal | 支持（`.ps1`） | 临时目录安装/恢复 20 项通过 | Linux 侧可按阶段恢复 |
 | 回退 / 只停用 | 支持（`.ps1`） | 临时目录恢复/幂等通过 | 幂等 |
 | 桌面入口 | 快捷方式 | 文件生成/保护通过；实际点击待验 | Linux 带 `X-SAB-Managed` 标记 |
-| 发布包 | `pack.ps1` | bridge-only-ci 已验证；完整包待验 | 两个独立包 |
+| 发布包 | `pack.ps1` | 完整包与 bridge-only-ci 分别验证 | 两个独立包，详见当前验证报告 |
 | 包内自带运行时 | 无（用系统 Node） | **必须**（`runtime/node`） | 不依赖系统 npm/node |
 
 ## 2. Linux 上的明确不在本版范围
@@ -30,7 +30,7 @@
 | 无图形界面 / 纯 SSH | 不支持 | 游戏本身需要窗口；`launch` 会跳过打开浏览器并说明 |
 | 自动写入 sudo 或改系统目录 | 不支持 | 权限不足时报错并给出说明，不静默提权 |
 | 结束游戏进程 | 不支持 | 检测到游戏运行时只拒绝操作 |
-| 多人模式专用能力 | 与 Windows 相同（受限） | 沿用既有 `UNSUPPORTED` 拒绝语义，仍只接受单人存档 |
+| 多人 MP1 | 实验性源码实现 | 真人主机 + 独立 farmhand；同 Windows，实机未验收 |
 | 自动迁移旧数据根 | 不支持 | 发现旧目录只提示，绝不合并凭据或账本 |
 
 ## 3. 文件位置对照
@@ -67,3 +67,7 @@
 | `1` | 校验失败或已安全回退 |
 | `2` | 端口/实例冲突，或游戏正在运行/状态不明 |
 | `3` | Mod 安装事务需要人工恢复 |
+
+## 6. Docker 预览
+
+发布 `linux/amd64` 的 bridge-runtime、game-runtime、mod-build 三个离线镜像及源码/Compose 工具包。Bridge 模式的真实容器、HTTP/stdio MCP 可以独立验证；game-runtime 带 X11/noVNC 图形栈，运行游戏前必须自行提供合法 Linux 游戏与 SMAPI。mod-build 是编译工具，不是游戏服务。容器版当前仅支持单人；MP1 只在原生客户端路径实验。Windows 可经 WSL2/Linux Docker 使用，Windows 容器、ARM64、macOS 游戏与 Steam 登录自动化不在范围。各项实际结果见当前验证报告，安装见 [DOCKER_INSTALL.md](DOCKER_INSTALL.md)。

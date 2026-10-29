@@ -116,7 +116,8 @@ Check(!PlatformPaths.IsPathInside("/games/Stardew", "/games/Stardew-old/x", "lin
 Check(!PlatformPaths.IsPathInside("/games/Stardew", "/games/Stardew", "linux"), "根目录本身不算内部路径");
 Check(PlatformPaths.ResolveForProcess(null, requireAbsoluteExplicit: true).Ok, "真实进程环境能解析出数据根");
 
-Console.WriteLine($"{passed} checks passed; isolated controller tests only.");
+MultiplayerTests.Run(Check, Reject);
+Console.WriteLine($"{passed} checks passed; isolated controller and multiplayer state-machine tests only.");
 
 sealed class Hanging(Action cancel) : IGameAction
 {

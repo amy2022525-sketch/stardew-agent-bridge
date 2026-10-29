@@ -1,6 +1,6 @@
 {
   "name": "@sab/contracts",
-  "version": "0.1.0",
+  "version": "0.2.0-preview.1",
   "private": true,
   "description": "Stardew Agent Bridge 版本化契约：协议类型、错误码、工具目录与参数校验。",
   "type": "module",

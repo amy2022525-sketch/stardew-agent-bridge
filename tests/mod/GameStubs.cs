@@ -1,7 +1,7 @@
 // 只为运行真实控制器源码的隔离测试提供最小游戏接口；不代表真实游戏验收。
 namespace StardewModdingAPI
 {
-    public static class Context { public static bool IsWorldReady { get; set; } = true; }
+    public static class Context { public static bool IsWorldReady { get; set; } = true; public static bool IsMultiplayer { get; set; } }
 }
 namespace StardewValley
 {

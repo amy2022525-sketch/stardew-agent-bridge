@@ -7,3 +7,6 @@ export * from './clients.js';
 export * from './instance-lock.js';
 export * from './launch.js';
 export * from './mod-config.js';
+export * from './container-addresses.js';
+export * from './container-gateway.js';
+export * from './container-status.js';

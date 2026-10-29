@@ -76,20 +76,22 @@ public sealed class ControlAuthority
     public static object PauseState(bool selfOpened)
     {
         var menu = Game1.activeClickableMenu;
-        var state = !Game1.shouldTimePass() ? "paused" : "running";
+        var state = Context.IsMultiplayer ? "unknown" : !Game1.shouldTimePass() ? "paused" : "running";
         if (menu == null && (Game1.eventUp || Game1.fadeToBlack)) state = "blocked";
         return new
         {
             state,
             menuType = menu?.GetType().Name,
-            selfOpened = menu != null && selfOpened
+            selfOpened = menu != null && selfOpened,
+            scope = Context.IsMultiplayer ? "actor_only" : "world",
+            worldContinues = Context.IsMultiplayer ? (bool?)null : state != "paused"
         };
     }
 
     // 只在安全条件下打开正常暂停菜单；绝不关闭玩家自己打开的菜单，也不跳过剧情。
     public bool TryOpenPauseMenu()
     {
-        if (!Context.IsWorldReady) return false;
+        if (!Context.IsWorldReady || Context.IsMultiplayer) return false;
         if (Game1.activeClickableMenu != null) return Game1.activeClickableMenu is GameMenu;
         if (Game1.eventUp || Game1.fadeToBlack || Game1.player.UsingTool || Game1.killScreen) return false;
         ownedPauseMenu = new GameMenu();

@@ -13,6 +13,9 @@ import {
     HEARTBEAT_INTERVAL_MS,
     HEARTBEAT_TIMEOUT_MS,
     MOD_PROTOCOL,
+    MOD_PROTOCOL_V2,
+    isActorContext,
+    type ActorContext,
     normalizeModCode,
     type ModEvent,
     type ModHello,
@@ -44,6 +47,7 @@ interface PendingRequest {
 export type ModLinkState = 'disconnected' | 'connecting' | 'handshaking' | 'ready';
 
 export interface ModRequestOptions {
+    actorContext?: ActorContext;
     actionId?: string;
     epoch?: number;
     timeoutMs?: number;
@@ -67,6 +71,7 @@ export class ModClient extends EventEmitter {
     private sequence = 0;
     private stopping = false;
     private consecutiveFailures = 0;
+    private wireProtocol: ModRequest['protocol'] = MOD_PROTOCOL_V2;
 
     hello: ModHello | null = null;
     lastFrameAt: number | null = null;
@@ -105,6 +110,7 @@ export class ModClient extends EventEmitter {
     connect(): void {
         if (this.state === 'connecting' || this.state === 'handshaking' || this.state === 'ready') return;
         this.stopping = false;
+        this.wireProtocol = MOD_PROTOCOL_V2;
         this.state = 'connecting';
         const url = `ws://${this.options.host}:${this.options.port}/`;
         const socket = new WebSocket(url, {
@@ -142,7 +148,11 @@ export class ModClient extends EventEmitter {
 
     private async handshake(): Promise<void> {
         try {
-            const response = await this.request('hello', {}, { timeoutMs: 5_000 });
+            let response = await this.request('hello', {}, { timeoutMs: 5_000 });
+            if (response.status !== 'succeeded' && normalizeModCode(response.error?.code) === 'PROTOCOL_MISMATCH') {
+                this.wireProtocol = MOD_PROTOCOL;
+                response = await this.request('hello', {}, { timeoutMs: 5_000 });
+            }
             if (response.status !== 'succeeded') {
                 throw new BridgeError(
                     normalizeModCode(response.error?.code),
@@ -151,6 +161,10 @@ export class ModClient extends EventEmitter {
             }
             const hello = response.result as ModHello;
             if (!hello || hello.kind !== 'hello') throw new BridgeError('PROTOCOL_MISMATCH', 'Mod 握手返回结构不符合协议');
+            if (!hello.singlePlayer && (hello.protocol !== MOD_PROTOCOL_V2 || !hello.supportedProtocols?.includes(MOD_PROTOCOL_V2))) {
+                throw new BridgeError('PROTOCOL_MISMATCH', '联机需要支持 v2 角色隔离协议的 Mod。');
+            }
+            this.wireProtocol = hello.protocol === MOD_PROTOCOL_V2 ? MOD_PROTOCOL_V2 : MOD_PROTOCOL;
             this.hello = hello;
             this.state = 'ready';
             this.reconnectAttempts = 0;
@@ -299,7 +313,7 @@ export class ModClient extends EventEmitter {
         const timeoutMs = options.timeoutMs ?? this.options.requestTimeoutMs;
         const request: ModRequest = {
             op: 'request',
-            protocol: MOD_PROTOCOL,
+            protocol: this.wireProtocol,
             requestId,
             command,
             args,
@@ -307,6 +321,8 @@ export class ModClient extends EventEmitter {
         };
         if (options.actionId) request.actionId = options.actionId;
         if (typeof options.epoch === 'number') request.epoch = options.epoch;
+        const actor = options.actorContext ?? this.hello?.multiplayer?.actorContext;
+        if (this.wireProtocol === MOD_PROTOCOL_V2 && isActorContext(actor)) request.actorContext = { ...actor };
 
         return new Promise<ModResponse>((resolve, reject) => {
             const timer = setTimeout(() => {

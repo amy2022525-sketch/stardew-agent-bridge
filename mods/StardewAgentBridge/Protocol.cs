@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using StardewAgentBridge.Multiplayer;
 
 namespace StardewAgentBridge;
 
@@ -13,7 +14,8 @@ public sealed record Request(
     string? ActionId = null,
     int Epoch = 0,
     string? Op = null,
-    string? Protocol = null);
+    string? Protocol = null,
+    ActorContext? ActorContext = null);
 
 public sealed record Fault(
     string Code,
@@ -31,19 +33,21 @@ public sealed record Response(
     Fault? Error = null,
     string? ActionId = null,
     int Epoch = 0,
-    long ElapsedMs = 0)
+    long ElapsedMs = 0,
+    ActorContext? ActorContext = null,
+    string? Command = null)
 {
     public static Response Ok(Request r, object? result, int epoch, long elapsedMs) =>
-        new("response", r.RequestId, "succeeded", result, null, r.ActionId, epoch, elapsedMs);
+        new("response", r.RequestId, "succeeded", result, null, r.ActionId, epoch, elapsedMs, r.ActorContext, r.Command);
 
     public static Response Partial(Request r, object? result, int epoch, long elapsedMs) =>
-        new("response", r.RequestId, "partial", result, null, r.ActionId, epoch, elapsedMs);
+        new("response", r.RequestId, "partial", result, null, r.ActionId, epoch, elapsedMs, r.ActorContext, r.Command);
 
     public static Response Fail(Request r, string code, string message, int epoch, long elapsedMs, bool? effectKnown = null, string? nextAction = null) =>
-        new("response", r.RequestId, StatusFor(code), null, new Fault(code, message, effectKnown ?? EffectKnownFor(code), nextAction ?? NextActionFor(code)), r.ActionId, epoch, elapsedMs);
+        new("response", r.RequestId, StatusFor(code), null, new Fault(code, message, effectKnown ?? EffectKnownFor(code), nextAction ?? NextActionFor(code)), r.ActionId, epoch, elapsedMs, r.ActorContext, r.Command);
 
     public static Response Unknown(Request r, string code, string message, int epoch, long elapsedMs) =>
-        new("response", r.RequestId, "unknown", null, new Fault(code, message, false, "query_action"), r.ActionId, epoch, elapsedMs);
+        new("response", r.RequestId, "unknown", null, new Fault(code, message, false, "query_action"), r.ActionId, epoch, elapsedMs, r.ActorContext, r.Command);
 
     private static string StatusFor(string code) => code switch
     {
@@ -86,6 +90,7 @@ public sealed class ActionFault : Exception
 public static class Protocol
 {
     public const string Name = "stardew-agent-bridge/1";
+    public const string NameV2 = "stardew-agent-bridge/2";
 
     public static readonly JsonSerializerOptions Json = new()
     {
@@ -99,7 +104,7 @@ public static class Protocol
     {
         "snapshot", "move", "select", "use", "interact", "menu", "screenshot", "status", "stop", "wait",
         "pause", "closemenu", "shop", "buy", "inspect", "ship", "container", "recipes", "craft", "place",
-        "eat", "equip", "fish", "combat", "saves", "load", "control"
+        "eat", "equip", "fish", "combat", "saves", "load", "control", "multiplayer"
     };
 
     public static readonly string[] WriteCommands =
@@ -115,8 +120,9 @@ public static class Protocol
         {
             "hello" or "status" or "screenshot" or "stop" => r.Command == "stop" ? new[] { "actionId" } : Array.Empty<string>(),
             "snapshot" => new[] { "radius" },
+            "multiplayer" => new[] { "operation" }, "multiplayer_bind" => Array.Empty<string>(),
             "control" => new[] { "operation", "holder", "leaseExpiresAt", "epoch", "pause", "mode" },
-            "move" => new[] { "near", "tile" }, "select" => new[] { "slot" }, "use" or "interact" or "menu" => new[] { "target" },
+            "move" => new[] { "near", "tile" }, "select" => new[] { "slot" }, "use" or "interact" => new[] { "target" }, "menu" => new[] { "target", "operation" },
             "wait" => new[] { "milliseconds" }, "pause" or "closemenu" => Array.Empty<string>(),
             "shop" => Array.Empty<string>(), "buy" => new[] { "itemId", "count" },
             "inspect" => new[] { "target" }, "ship" => new[] { "target", "slot", "count" },
@@ -135,7 +141,9 @@ public static class Protocol
         if (r.Command == "select" && (Integer(r.Args, "slot") < 0 || Integer(r.Args, "slot") > 35)) throw new ActionFault("INVALID_ARGUMENT", "slot 必须为 0–35。");
         if (r.Command == "wait" && (Integer(r.Args, "milliseconds") < 100 || Integer(r.Args, "milliseconds") > 10000)) throw new ActionFault("INVALID_ARGUMENT", "milliseconds 必须为 100–10000。");
         if (r.Command == "stop" && r.Args.TryGetProperty("actionId", out _) && !ValidId(Text(r.Args, "actionId"))) throw new ActionFault("INVALID_ARGUMENT", "actionId 无效。");
-        if (r.Command is "use" or "interact" or "menu") CheckReference(Text(r.Args, "target"));
+        var openInventory = r.Command == "menu" && r.Args.TryGetProperty("operation", out var menuOp) && menuOp.GetString() == "open_inventory";
+        if (r.Command is "use" or "interact" || (r.Command == "menu" && !openInventory)) CheckReference(Text(r.Args, "target"));
+        if (openInventory && r.Args.TryGetProperty("target", out _)) throw new ActionFault("INVALID_ARGUMENT", "open_inventory 不能同时指定 target。");
         if (r.Command is "inspect" or "ship" or "place" or "container") CheckReference(Text(r.Args, "target"));
         if (r.Command is "fish" or "combat" && r.Args.TryGetProperty("target", out _)) CheckReference(Text(r.Args, "target"));
         if (r.Command is "ship" or "place" or "eat" or "equip" && (Integer(r.Args, "slot") < 0 || Integer(r.Args, "slot") > 35)) throw new ActionFault("INVALID_ARGUMENT", "slot 必须为 0–35。");
@@ -175,7 +183,7 @@ public static class Protocol
 
     private static void CheckReference(string reference)
     {
-        if (!System.Text.RegularExpressions.Regex.IsMatch(reference, "^@s[0-9]+:[em][0-9]+$")) throw new ActionFault("INVALID_ARGUMENT", "目标引用格式无效。");
+        if (!System.Text.RegularExpressions.Regex.IsMatch(reference, "^(?:@s[0-9]+:[em][0-9]+|@mp2_[A-Za-z0-9_-]{22}_[em][0-9]+)$")) throw new ActionFault("INVALID_ARGUMENT", "目标引用格式无效。");
     }
 
     public static bool IsWrite(string command) => WriteCommands.Contains(command);

@@ -2,6 +2,7 @@
  * 收据与去重签名的构造规则（接口草案 §5、§6）。
  */
 import { createHash } from 'node:crypto';
+import type { ActorContext } from './multiplayer.js';
 import {
     CONTRACTS_SCHEMA_VERSION,
     type ActionReceipt,
@@ -26,6 +27,7 @@ export interface SignatureInput {
     controlSessionId: string | null;
     command: string;
     args: Record<string, unknown>;
+    actorContext?: ActorContext;
 }
 
 /** 去重签名：客户端 + 控制会话 + 命令 + 规范化参数。 */
@@ -35,7 +37,8 @@ export function actionSignature(input: SignatureInput): string {
             clientId: input.clientId,
             controlSessionId: input.controlSessionId,
             command: input.command,
-            args: input.args
+            args: input.args,
+            ...(input.actorContext ? { actorContext: input.actorContext } : {})
         }))
         .digest('hex');
 }

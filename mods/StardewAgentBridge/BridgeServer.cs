@@ -167,7 +167,7 @@ public sealed class BridgeServer : IDisposable
 
                 if (request == null || string.IsNullOrEmpty(request.RequestId) || request.RequestId.Length > 80) return;
                 if (request.Op != null && request.Op != "request") return;
-                if (request.Protocol != null && request.Protocol != Protocol.Name)
+                if (request.Protocol != null && request.Protocol != Protocol.Name && request.Protocol != Protocol.NameV2)
                 {
                     await peer.Send(Response.Fail(request, "PROTOCOL_MISMATCH", $"需要协议 {Protocol.Name}。", 0, 0));
                     continue;

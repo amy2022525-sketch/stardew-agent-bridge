@@ -11,6 +11,7 @@ import { Bridge } from '@sab/server';
 import { Logger } from '@sab/server';
 import { dataPaths } from '@sab/server';
 import { MockMod } from './mock-mod.js';
+import type { MultiplayerStatus } from '@sab/contracts';
 
 /** 取一个空闲端口：先占用再释放，交给模拟 Mod 监听。 */
 async function freePort(): Promise<number> {
@@ -54,6 +55,7 @@ export async function startStack(options: {
     modPort?: number;
     /** 制造“账本不可写”：把 ledger.sqlite 建成目录。 */
     breakLedger?: boolean;
+    multiplayer?: MultiplayerStatus;
 } = {}): Promise<Stack> {
     const dataDir = mkdtempSync(path.join(os.tmpdir(), 'sab-test-'));
     const paths = dataPaths(dataDir);
@@ -79,6 +81,7 @@ export async function startStack(options: {
         port: reservedPort,
         saveLoaded: options.saveLoaded ?? true
     });
+    mod.multiplayer = options.multiplayer ?? null;
     const modPort = await mod.start();
 
     const bridgePort = await bridge.start();

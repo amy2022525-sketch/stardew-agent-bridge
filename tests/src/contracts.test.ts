@@ -17,8 +17,8 @@ const WRITE_TOOLS = TOOLS.filter((tool) => tool.kind === 'write');
 const READ_TOOLS = TOOLS.filter((tool) => tool.kind === 'read');
 
 describe('工具目录', () => {
-    it('包含 28 个工具且名称唯一、统一前缀', () => {
-        assert.equal(TOOLS.length, 28);
+    it('包含 29 个工具且名称唯一、统一前缀', () => {
+        assert.equal(TOOLS.length, 29);
         const names = new Set(TOOLS.map((tool) => tool.name));
         assert.equal(names.size, TOOLS.length);
         for (const tool of TOOLS) {

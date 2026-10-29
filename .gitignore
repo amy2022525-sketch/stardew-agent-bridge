@@ -53,3 +53,8 @@ release-*/
 screenshots/
 problem-bundles/
 *.tsbuildinfo
+
+# Container credentials are local only; the explanatory README may be tracked.
+docker/secrets/*
+!docker/secrets/README.md
+backups/

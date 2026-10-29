@@ -1,7 +1,7 @@
 {
   "Name": "Stardew Agent Bridge",
   "Author": "Stardew Agent Bridge contributors",
-  "Version": "0.1.0",
+  "Version": "0.2.0-preview.1",
   "Description": "通过本机回环协议向任意支持 MCP 的 Agent 提供游戏观察与正常操作能力。",
   "UniqueID": "StardewAgentBridge.Bridge",
   "EntryDll": "StardewAgentBridge.dll",

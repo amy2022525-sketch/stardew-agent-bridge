@@ -218,9 +218,18 @@ async function cmdStart(flags: Record<string, FlagValue>): Promise<number> {
         });
         bridge = new Bridge({ dataDir: descriptor.path, configOverride, httpServer: reservedServer });
         const port = await bridge.start();
+        // 容器模式下 config.json 的 publicBaseUrl 已由 Bridge 严格校验；
+        // 有公共地址时展示给用户的是宿主映射地址，内部监听仍是回环。
+        const publicBase = bridge.config.publicBaseUrl;
         process.stdout.write('Stardew Agent Bridge 已启动\n');
-        process.stdout.write(`  Web 控制台：http://127.0.0.1:${port}/\n`);
-        process.stdout.write(`  MCP HTTP  ：http://127.0.0.1:${port}/mcp\n`);
+        if (publicBase) {
+            process.stdout.write(`  Web 控制台（外部）：${publicBase}/\n`);
+            process.stdout.write(`  MCP HTTP（外部）  ：${publicBase}/mcp\n`);
+            process.stdout.write(`  内部监听          ：http://127.0.0.1:${port}/（容器内回环）\n`);
+        } else {
+            process.stdout.write(`  Web 控制台：http://127.0.0.1:${port}/\n`);
+            process.stdout.write(`  MCP HTTP  ：http://127.0.0.1:${port}/mcp\n`);
+        }
         process.stdout.write(`  数据目录  ：${paths.root}（来源 ${descriptor.source}）\n`);
         process.stdout.write(`  日志      ：${path.join(paths.logs, 'bridge.log')}\n`);
         process.stdout.write(`  实例锁    ：${paths.lock}\n`);
@@ -614,6 +623,10 @@ function cmdToken(flags: Record<string, FlagValue>, rest: string[]): number {
     const [action = 'list', clientId] = rest;
     if (action === 'list') {
         const clients = auth.listClients();
+        if (flags.json === true) {
+            process.stdout.write(`${JSON.stringify({ ok: true, clients })}\n`);
+            return 0;
+        }
         if (clients.length === 0) {
             process.stdout.write('当前没有客户端令牌。用 token issue <clientId> 创建。\n');
             return 0;
@@ -629,17 +642,29 @@ function cmdToken(flags: Record<string, FlagValue>, rest: string[]): number {
     }
     if (action === 'issue') {
         const credential = auth.issue(clientId);
+        if (flags.json === true) {
+            process.stdout.write(`${JSON.stringify({ ok: true, credential })}\n`);
+            return 0;
+        }
         process.stdout.write(`已创建/复用客户端 ${credential.clientId} 的令牌：\n${credential.token}\n`);
         process.stdout.write('令牌只在本机 credentials.json 保存；请勿提交到仓库或公开分享。\n');
         return 0;
     }
     if (action === 'rotate') {
         const credential = auth.rotate(clientId);
+        if (flags.json === true) {
+            process.stdout.write(`${JSON.stringify({ ok: true, credential })}\n`);
+            return 0;
+        }
         process.stdout.write(`已轮换 ${credential.clientId} 的令牌：\n${credential.token}\n旧令牌立即失效。\n`);
         return 0;
     }
     if (action === 'revoke') {
         auth.revoke(clientId);
+        if (flags.json === true) {
+            process.stdout.write(`${JSON.stringify({ ok: true, clientId })}\n`);
+            return 0;
+        }
         process.stdout.write(`已吊销客户端 ${clientId} 的令牌。\n`);
         return 0;
     }
@@ -667,17 +692,23 @@ function cmdHosts(flags: Record<string, FlagValue>): number {
     const auth = new AuthStore(paths);
     const clientId = stringFlag(flags, 'client-id') ?? (host === 'generic' ? 'agent' : host);
     const credential = auth.issue(clientId, HOST_LABELS[host]);
-    const endpointPort = readEndpoint(paths.endpoint)?.port ?? loadConfigPort(paths);
+    const endpoint = readEndpoint(paths.endpoint);
+    const endpointPort = endpoint?.port ?? loadConfigPort(paths);
+    // 容器模式：endpoint 可能带公共地址字段；宿主 CLI 在本机运行时只认回环地址。
+    // （Docker 部署的 MCP 配置由 scripts/docker/manage.mjs mcp-config 生成。）
+    const publicBase = typeof endpoint?.['publicBaseUrl'] === 'string' ? (endpoint['publicBaseUrl'] as string) : null;
+    const bridgeUrl = publicBase ? `${publicBase}/mcp` : `http://127.0.0.1:${endpointPort}/mcp`;
     const snippet = generateHostConfig({
         host,
         transport,
         clientId,
         clientName: HOST_LABELS[host],
         token: credential.token,
-        bridgeUrl: `http://127.0.0.1:${endpointPort}/mcp`,
+        bridgeUrl,
         stdioAdapterPath: resolveStdioAdapter(),
         nodeExecutable: process.execPath,
-        dataDir: paths.root
+        dataDir: paths.root,
+        containerMode: publicBase !== null
     });
     process.stdout.write(`# ${HOST_LABELS[host]} / ${transport}\n# 目标位置：${snippet.targetFile}\n\n`);
     process.stdout.write(`${snippet.content}\n\n`);

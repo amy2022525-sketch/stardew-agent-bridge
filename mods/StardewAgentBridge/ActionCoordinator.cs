@@ -8,11 +8,20 @@ public interface IGameAction
     void Cancel();
 }
 
+// After a permitted native door/exit changes the scene, inputs are cancelled before
+// revoking the old scope. Only this read-only observer may finish that receipt.
+public interface ISceneTransitionAction
+{
+    bool CanObserveSceneTransition { get; }
+    bool IsExpectedScene { get; }
+    object? ObserveSceneTransition();
+}
+
 // 主线程只允许一个写动作；「已用 ID」和「终态缓存」分开保存：
 // 缓存被淘汰也不能让消费动作重新执行，这是扣钱/扣物品类动作的最后一道保险。
 public sealed class ActionCoordinator
 {
-    private sealed record Active(Request Request, object Owner, IGameAction Action, DateTime StartedAt, DateTime Deadline, Action<Response> Reply);
+    private sealed record Active(Request Request, object Owner, IGameAction Action, DateTime StartedAt, DateTime Deadline, Action<Response> Reply, bool TransitionOnly = false);
 
     private Active? active;
     private readonly Dictionary<string, string> seen = new();
@@ -22,6 +31,7 @@ public sealed class ActionCoordinator
     private readonly Func<Response, Response> decorate;
 
     public Action<Exception>? OnError { get; set; }
+    public Action<Request>? BeforeTick { get; set; }
 
     public ActionCoordinator(ControlAuthority control, Func<Response, Response> decorate)
     {
@@ -31,6 +41,7 @@ public sealed class ActionCoordinator
 
     public string? ActiveId => active?.Request.ActionId;
     public string? ActiveCommand => active?.Request.Command;
+    public bool ObservingSceneTransition => active?.TransitionOnly == true;
     public int RecordedActions => seen.Count;
 
     public object Status(string[] releasedInputs) => new
@@ -46,7 +57,8 @@ public sealed class ActionCoordinator
         expiresAt = control.ExpiresAt?.ToString("o")
     };
 
-    private static string Signature(Request r) => r.Command + ":" + Canonical(r.Args);
+    private static string Signature(Request r) => r.Command + ":" + Canonical(r.Args) + (r.ActorContext == null ? "" : JsonSerializer.Serialize(r.ActorContext));
+    private static string Key(string id, Multiplayer.ActorContext? scope) => scope == null ? id : JsonSerializer.Serialize(new[] { scope.WorldId, scope.ActorFarmerId, id });
 
     private static string Canonical(JsonElement value) => value.ValueKind == JsonValueKind.Object
         ? "{" + string.Join(",", value.EnumerateObject().OrderBy(p => p.Name, StringComparer.Ordinal).Select(p => JsonSerializer.Serialize(p.Name) + ":" + Canonical(p.Value))) + "}"
@@ -56,7 +68,7 @@ public sealed class ActionCoordinator
 
     public void Start(Request request, object owner, DateTime deadline, Func<IGameAction> create, Action<Response> reply)
     {
-        var id = request.ActionId!;
+        var id = Key(request.ActionId!, request.ActorContext);
         if (seen.TryGetValue(id, out var signature))
         {
             if (signature != Signature(request))
@@ -102,7 +114,18 @@ public sealed class ActionCoordinator
         if (now >= active.Deadline) { Stop("TIMEOUT", "游戏动作超时，已停止后续操作；结果不明请先观察。"); return; }
         try
         {
-            var result = active.Action.Tick();
+            object? result;
+            if (active.TransitionOnly)
+            {
+                var transition = (ISceneTransitionAction)active.Action;
+                if (!transition.CanObserveSceneTransition) throw new ActionFault("STALE_ACTOR_SESSION", "场景再次改变，不能确认原动作的落点。");
+                result = transition.ObserveSceneTransition();
+            }
+            else
+            {
+                BeforeTick?.Invoke(active.Request);
+                result = active.Action.Tick();
+            }
             if (result != null) Finish(Response.Ok(active.Request, result, control.Epoch, Elapsed(active)));
         }
         catch (Exception error)
@@ -110,6 +133,19 @@ public sealed class ActionCoordinator
             if (error is not ActionFault) OnError?.Invoke(error);
             Finish(Fault(active!.Request, error, mayHaveEffects: true));
         }
+    }
+
+    public bool BeginSceneObservation()
+    {
+        if (active?.Request.ActorContext == null || active.Action is not ISceneTransitionAction transition || !transition.CanObserveSceneTransition) return false;
+        if (active.TransitionOnly) return true;
+        try
+        {
+            active.Action.Cancel();
+            active = active with { TransitionOnly = true };
+            return true;
+        }
+        catch (Exception error) { OnError?.Invoke(error); Stop("RESULT_UNKNOWN", "释放切图输入失败，请重新观察。"); return false; }
     }
 
     public void Stop(string code = "CANCELLED", string message = "已停止自动动作并释放输入。")
@@ -126,12 +162,16 @@ public sealed class ActionCoordinator
         return true;
     }
 
-    public void Reset()
+    public void Reset(bool retainDedup = false)
     {
         Stop("STALE_REF", "存档会话已改变。");
-        seen.Clear();
-        completed.Clear();
-        order.Clear();
+        if (retainDedup) return;
+        // SP sessions may reset their action namespace; MP actor tombstones survive
+        // title/reconnect within this process even if Context.IsMultiplayer is now false.
+        foreach (var key in seen.Keys.Where(k => !k.StartsWith("[", StringComparison.Ordinal)).ToArray()) seen.Remove(key);
+        foreach (var key in completed.Keys.Where(k => !k.StartsWith("[", StringComparison.Ordinal)).ToArray()) completed.Remove(key);
+        var retained = order.Where(k => k.StartsWith("[", StringComparison.Ordinal)).ToArray(); order.Clear();
+        foreach (var key in retained) order.Enqueue(key);
     }
 
     private static long Elapsed(Active active) => Math.Max(0, (long)(DateTime.UtcNow - active.StartedAt).TotalMilliseconds);
@@ -158,8 +198,9 @@ public sealed class ActionCoordinator
     private void Remember(Response response)
     {
         if (response.ActionId == null) return;
-        completed[response.ActionId] = response;
-        order.Enqueue(response.ActionId);
+        var key = Key(response.ActionId, response.ActorContext);
+        completed[key] = response;
+        order.Enqueue(key);
         while (order.Count > 256) completed.Remove(order.Dequeue());
     }
 

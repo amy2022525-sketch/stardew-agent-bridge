@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using StardewValley;
+using StardewModdingAPI;
 
 namespace StardewAgentBridge;
 
@@ -26,6 +27,7 @@ internal sealed class BackgroundUpdates : IDisposable
     public void BeforeUpdate()
     {
         AfterUpdate();
+        if (Context.IsMultiplayer) return;
         if (GameRunner.instance.IsActive) return;
         options = Game1.options;
         if (options == null) return;

@@ -147,7 +147,7 @@ Mod 在自己的内存里记录已见 `actionId` 与参数指纹：
 - 传输：`POST /mcp`（Streamable HTTP）。工具用 JSON Schema 注册（`fromJsonSchema`）。
 - Bearer 身份绑定调用与会话。旧 `2025-11-25` 协议使用有状态 HTTP 传输，现代 `2026-07-28` 使用 SDK 新传输；取消信号沿 MCP → control-core 定向停止该调用已经派发的动作。HTTP 请求断开和 stdio 取消也转发停止；不能保证宿主断开前未发生消费。
 - 返回：文本摘要（给人/无视觉能力模型读）+ `structuredContent`（机器读）+ 截图工具额外返回 `image`。失败时 `isError=true`，文本首行固定为 `错误 <CODE>: <message>（effectKnown=… 下一步=…）`，并同时给出 `structuredContent.error`。
-- 28 个工具与分类见 [README](../README.md) §3。
+- 29 个工具与分类见 [README](../README.md) §3。
 
 写工具的公共参数：
 

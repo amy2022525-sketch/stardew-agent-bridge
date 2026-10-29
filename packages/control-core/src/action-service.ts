@@ -16,8 +16,16 @@ import {
     SNAPSHOT_HARD_LIMIT_BYTES,
     actionSignature,
     buildReceipt,
+    buildSummary,
     byteLength,
+    canonicalJson,
     dedupKey,
+    requireActor,
+    actorSessionKey,
+    multiplayerDedupKey,
+    isActorContext,
+    canonicalFarmerId,
+    type ActorContext,
     describeIssues,
     getTool,
     makeFault,
@@ -161,7 +169,7 @@ export class ActionService {
         const tool = validation.tool;
         const args = validation.args;
         try {
-            if (tool.command === 'bridge:status') return this.statusResult(args);
+            if (tool.command === 'bridge:status') return this.statusResult(args, ctx);
             if (tool.command === 'bridge:session') return await this.handleSession(args, ctx);
             if (tool.command === 'stop') return await this.handleStop(args, ctx);
             if (tool.kind === 'read' || (tool.kind === 'mixed' && args.operation === 'list')) {
@@ -307,6 +315,8 @@ export class ActionService {
             throw new BridgeError('GAME_UNAVAILABLE', '游戏 Mod 未连接，写动作已拒绝。');
         }
         const command = tool.command;
+        const actor = this.mod.hello?.singlePlayer === false ? requireActor(this.mod.hello.multiplayer) : undefined;
+        if (actor && actorSessionKey(actor) !== actorSessionKey(session.actorContext)) throw new BridgeError('STALE_ACTOR_SESSION', '角色会话已改变，请重新获取控制。');
         const modArgs = tool.modArgs ? tool.modArgs(args) : pickArgs(args);
         const providedId = typeof args.actionId === 'string' ? args.actionId : null;
         const actionId = providedId ?? this.generateActionId(session.controlSessionId);
@@ -314,13 +324,14 @@ export class ActionService {
             clientId: ctx.clientId,
             controlSessionId: session.controlSessionId,
             command,
-            args: modArgs
+            args: modArgs,
+            actorContext: actor
         });
         const instanceId = this.mod.hello?.instanceId ?? this.world.instanceId;
         if (!instanceId) throw new BridgeError('GAME_UNAVAILABLE', '缺少游戏实例标识，无法安全去重。');
         // -1 表示“执行时世界代次未知”（例如标题页或刚连接）：不得用于跨世界冲突判定。
         const recordedWorldGeneration = this.world.worldGeneration ?? -1;
-        const key = dedupKey(instanceId, actionId);
+        const key = actor ? multiplayerDedupKey(actor, actionId) : dedupKey(instanceId, actionId);
 
         const existing = this.ledger.lookup(key, signature);
         if (existing.kind === 'conflict') {
@@ -333,7 +344,7 @@ export class ActionService {
         // 同一 actionId 但记录属于另一个世界（例如中途换过存档）：既不返回旧收据，也不重放。
         const recordedWorld = existing.row?.worldGeneration;
         if (
-            existing.kind === 'same' &&
+            !actor && existing.kind === 'same' &&
             typeof recordedWorld === 'number' && recordedWorld >= 0 &&
             this.world.worldGeneration !== null &&
             recordedWorld !== this.world.worldGeneration
@@ -375,7 +386,8 @@ export class ActionService {
             controlSessionId: session.controlSessionId,
             gameInstanceId: instanceId,
             worldGeneration: recordedWorldGeneration,
-            intentAt: startedAt
+            intentAt: startedAt,
+            actorContext: actor
         });
         this.activeActionId = actionId;
         this.activeCommand = tool.name;
@@ -397,7 +409,8 @@ export class ActionService {
                 actionId,
                 epoch: session.leaseEpoch,
                 timeoutMs: tool.timeoutMs ?? DEFAULT_ACTION_TIMEOUT_MS,
-                isWrite: true
+                isWrite: true,
+                actorContext: actor
             });
             const onAbort = () => {
                 void this.handleStop({ actionId }, ctx).catch(error => this.logger?.('warn', `取消 ${actionId} 未获确认：${String(error)}`));
@@ -423,6 +436,31 @@ export class ActionService {
             response,
             transportError
         });
+        if (actor) {
+            const raw = response?.result && typeof response.result === 'object' ? (response.result as Record<string, unknown>).multiplayer : null;
+            const detail = raw && typeof raw === 'object' ? raw as Record<string, unknown> : null;
+            const sameActor = isActorContext(response?.actorContext) && canonicalJson(response.actorContext) === canonicalJson(actor);
+            if (response && !sameActor && (receipt.status === 'succeeded' || receipt.status === 'partial')) {
+                // 回执无法归因到本次角色：先整体归一为 unknown，再计算 MP 字段与摘要，
+                // 保证 summary/status/verified/effectKnown/effects/nextAction/durability 全部一致。
+                receipt.status = 'unknown';
+                receipt.effectKnown = false;
+                receipt.verified = false;
+                receipt.effects = null;
+                receipt.stopReason = null;
+                receipt.nextAction = 'query_action';
+                receipt.error = makeFault('RESULT_UNKNOWN', '回执角色上下文不匹配，不能确认动作结果。', { effectKnown: false, nextAction: 'query_action' });
+            }
+            const localObserved = sameActor && detail?.confirmationScope === 'local_observed' && (receipt.status === 'succeeded' || receipt.status === 'partial');
+            receipt.schemaVersion = 2;
+            receipt.multiplayer = { actor, confirmationScope: localObserved ? 'local_observed' : 'none',
+                durability: receipt.effectKnown ? 'not_saved' : 'unknown', resourceScope: command === 'use' ? 'shared_world' : 'actor', worldContinues: null };
+            receipt.verified = receipt.verified && localObserved;
+            receipt.pause = { requested: false, state: 'unknown', reason: 'multiplayer_world_continues' };
+            // MP 覆盖 pause 等字段后按最终值重建摘要，避免摘要保留旧成功或暂停口径。
+            receipt.summary = buildSummary({ command, status: receipt.status, verified: receipt.verified,
+                effects: receipt.effects, pause: receipt.pause, error: receipt.error });
+        }
         this.activeActionId = null;
         this.activeCommand = null;
         this.activeClientId = null;
@@ -680,7 +718,7 @@ export class ActionService {
         const control = this.control.status(this.activeActionId, this.activeCommand, unresolved);
         return {
             ok: true,
-            bridgeVersion: process.env.SAB_VERSION ?? '0.1.0',
+            bridgeVersion: process.env.SAB_VERSION ?? BRIDGE_VERSION,
             contractsSchemaVersion: CONTRACTS_SCHEMA_VERSION,
             startedAt: this.startedAt,
             now: new Date().toISOString(),
@@ -702,7 +740,9 @@ export class ActionService {
                 epoch: hello?.epoch ?? 0,
                 controller: hello?.controller ?? null,
                 lastError: this.mod.lastError,
-                reconnectAttempts: this.mod.reconnectAttempts
+                reconnectAttempts: this.mod.reconnectAttempts,
+                singlePlayer: hello?.singlePlayer,
+                multiplayer: hello?.multiplayer
             },
             control,
             ledger: {
@@ -717,11 +757,15 @@ export class ActionService {
         };
     }
 
-    private statusResult(args: Record<string, unknown>): ToolResult {
+    private statusResult(args: Record<string, unknown>, ctx: ToolContext): ToolResult {
         const status = this.getStatus();
-        const receipt = typeof args.actionId === 'string' ? this.ledger.findById(args.actionId) : null;
-        const recentReceipts = this.ledger.recent(5);
-        const unresolvedReceipts = this.ledger.unresolved(10);
+        const actor = typeof args.worldId === 'string' && typeof args.actorFarmerId === 'string'
+            ? { worldId: args.worldId, actorFarmerId: canonicalFarmerId(args.actorFarmerId) }
+            : this.mod.hello?.multiplayer?.actorContext ?? undefined;
+        const receipt = typeof args.actionId === 'string' ? this.ledger.findById(args.actionId, ctx.clientId, actor) : null;
+        const recentReceipts = this.ledger.recent(5, ctx.clientId, actor);
+        const unresolvedReceipts = this.ledger.unresolved(10, ctx.clientId, actor);
+        status.control.unresolvedActionIds = unresolvedReceipts.map(r => r.actionId);
         const text = [
             `Bridge ${status.bridgeVersion} 端口 ${status.port}`,
             `Mod 连接=${status.mod.connected ? '是' : '否'} 实例=${status.mod.instanceId ?? '-'} 存档=${status.mod.saveLoaded ? '已加载' : '未加载'}`,
@@ -733,8 +777,8 @@ export class ActionService {
         return { isError: false, text: `${text}\n收据=${JSON.stringify(records)}`, structured: { kind: 'status', status, ...records } };
     }
 
-    resolveReceipt(actionId: string): ActionReceipt | null {
-        return this.ledger.findById(actionId);
+    resolveReceipt(actionId: string, actor?: Pick<ActorContext, 'worldId' | 'actorFarmerId'>): ActionReceipt | null {
+        return this.ledger.findById(actionId, undefined, actor);
     }
 
     recentReceipts(limit = 20, clientId?: string): ActionReceipt[] {

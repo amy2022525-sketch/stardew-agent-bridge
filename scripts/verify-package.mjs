@@ -231,7 +231,7 @@ try {
     const webHeaders = { cookie, origin: url, 'content-type': 'application/json', 'x-sab-csrf': csrfToken };
     const connectionInfo = await (await fetch(url + '/api/v1/mcp', { headers: webHeaders })).json();
     assert.equal(connectionInfo.url, url + '/mcp');
-    assert.equal(connectionInfo.toolCount, 28);
+    assert.equal(connectionInfo.toolCount, 29);
     assert.deepEqual(connectionInfo.clients, []);
     pass('portable Web MCP metadata');
 
@@ -246,7 +246,7 @@ try {
         const result = await response.json();
         assert.equal(result.ok, true);
         assert.equal(result.transport, transport);
-        assert.equal(result.toolCount, 28);
+        assert.equal(result.toolCount, 29);
         assert.equal(result.modConnected, false);
         pass(`portable Web MCP ${transport} real channel check`);
     }
@@ -256,8 +256,8 @@ try {
     await http.connect(
         new StreamableHTTPClientTransport(new URL(url + '/mcp'), { authProvider: { token: async () => credentials.clients.portable.token } })
     );
-    assert.equal((await http.listTools()).tools.length, 28);
-    pass('portable HTTP MCP lists 28 tools');
+    assert.equal((await http.listTools()).tools.length, 29);
+    pass('portable HTTP MCP lists 29 tools');
     const status = await http.callTool({ name: 'stardew_status', arguments: {} });
     assert.notEqual(status.isError, true);
     pass('portable authenticated status');

@@ -1,9 +1,11 @@
 /**
  * Web 控制台（无框架，仅 TypeScript + DOM）。
  * 只调用本机 /api/v1 接口；所有写操作需网页会话 + CSRF，且经过同一业务核心。
+ * Docker 模式下额外读取同源网关的净化状态 /container/live（原生部署 404 时整体隐藏）。
  */
 import type { ActionReceipt, BridgeStatus, ControlSessionInfo } from '@sab/contracts';
 import { setupMcpPanel } from './mcp-panel.js';
+import { desktopLinkUrl, dockerStatusHint, fetchDockerStatus, type DockerStatusView } from './docker-status.mjs';
 
 interface TimelineEvent {
     seq: number;
@@ -16,6 +18,10 @@ const els = {
     modDot: document.getElementById('mod-dot') as HTMLElement,
     version: document.getElementById('bridge-version') as HTMLElement,
     pausePill: document.getElementById('pause-pill') as HTMLElement,
+    dockerCard: document.getElementById('docker-card') as HTMLElement,
+    dockerTitle: document.getElementById('docker-title') as HTMLElement,
+    dockerDetail: document.getElementById('docker-detail') as HTMLElement,
+    desktopLink: document.getElementById('btn-desktop') as HTMLAnchorElement,
     statusGrid: document.getElementById('status-grid') as HTMLElement,
     statusNotice: document.getElementById('status-notice') as HTMLElement,
     controlGrid: document.getElementById('control-grid') as HTMLElement,
@@ -95,8 +101,24 @@ function renderStatus(): void {
         ['服务端口', String(status.port)]
     ]);
     els.statusNotice.textContent = actionNotice ?? status.notice ?? '';
+    renderMultiplayer();
     renderControl();
     renderNotes();
+}
+
+function renderMultiplayer(): void {
+    const status = currentStatus; if (!status) return;
+    const mp = status.mod.multiplayer; const active = status.mod.singlePlayer === false;
+    document.getElementById('multiplayer-card')?.classList.toggle('hidden', !active && !mp?.enabled);
+    const grid = document.getElementById('multiplayer-grid');
+    if (grid && mp) setKv(grid, [ ['状态 / 原因', `${mp.state} / ${mp.reason}`], ['世界', mp.worldId ?? '—'],
+        ['我的农场工 ID', mp.actorFarmerId ?? '—'], ['主机 ID', mp.hostFarmerId ?? '—'], ['主机会话', mp.hostSessionId ?? '—'],
+        ['连接', mp.connectionId ?? '—'], ['许可', mp.permissionLeaseHeld ? `有效，剩余 ${mp.permissionRemainingMs} ms` : '尚无有效许可'],
+        ['政策版本 / 世界阶段', `${mp.policyRevision} / ${mp.phase}`] ]);
+    const policy = document.getElementById('multiplayer-policy'); if (policy) policy.textContent = mp?.policy ? JSON.stringify(mp.policy, null, 2) : '主机尚未提供本角色的政策。';
+    const pause = document.getElementById('btn-pause') as HTMLButtonElement | null; if (pause) pause.disabled = active;
+    const bind = document.getElementById('btn-bind-actor') as HTMLButtonElement | null; if (bind) bind.disabled = !active || !mp?.enabled || !!status.control.holder;
+    const note = document.getElementById('multiplayer-notice'); if (note) note.textContent = active ? '实时联机：停止或打开自己的背包都不能保证世界暂停。共享交易、箱子、睡觉确认和放置等操作尚未开放。' : '联机 profile 等待通过原生 Co-op 进入农场工。';
 }
 
 function renderControl(): void {
@@ -157,6 +179,34 @@ function addTimelineEvent(event: TimelineEvent): void {
     while (els.timeline.childElementCount > 200) els.timeline.lastElementChild?.remove();
 }
 
+function renderDockerCard(docker: DockerStatusView | null): void {
+    // 原生（非 Docker）部署没有 /container/live：整卡保持隐藏，页面其余功能不受影响。
+    if (!docker) {
+        els.dockerCard.classList.add('hidden');
+        return;
+    }
+    els.dockerCard.classList.remove('hidden');
+    const hint = dockerStatusHint(docker);
+    if (hint) {
+        els.dockerTitle.textContent = hint.title;
+        els.dockerDetail.textContent = hint.detail;
+    }
+    setKv(document.getElementById('docker-grid') as HTMLElement, [
+        ['模式 / 状态', `${docker.mode === 'game' ? 'game（含游戏）' : 'bridge（无游戏）'} / ${docker.state}`],
+        ['Mod 握手', docker.modConnected ? '已连接' : '未连接'],
+        ['存档', docker.saveLoaded ? '已加载' : '未加载'],
+        ['桌面通道', docker.desktopEnabled ? (docker.desktopAvailable ? '可用' : '已启用但降级') : '未启用']
+    ]);
+    const url = desktopLinkUrl(docker);
+    els.desktopLink.classList.toggle('hidden', url === null);
+    if (url !== null) {
+        els.desktopLink.href = url;
+        els.desktopLink.rel = 'noopener noreferrer';
+        els.desktopLink.target = '_blank';
+    }
+}
+
+
 async function refreshStatus(): Promise<void> {
     try {
         currentStatus = await api<BridgeStatus>('/api/v1/status');
@@ -165,6 +215,7 @@ async function refreshStatus(): Promise<void> {
     } catch (error) {
         els.statusNotice.textContent = `读取状态失败：${error instanceof Error ? error.message : String(error)}`;
     }
+    renderDockerCard(await fetchDockerStatus());
 }
 
 async function callTool(name: string, args: Record<string, unknown> = {}): Promise<{ isError: boolean; text: string }> {
@@ -222,7 +273,13 @@ function wire(): void {
     on('btn-refresh', refreshStatus);
     on('btn-snapshot', takeSnapshot);
     on('btn-start', async () => {
-        await api('/api/v1/control/start', { method: 'POST', body: JSON.stringify({ mode: 'step' }) });
+        const mode = (document.getElementById('control-mode') as HTMLSelectElement).value;
+        if (currentStatus?.mod.singlePlayer === false && mode !== 'realtime') throw new Error('联机需要选择“实时（世界继续运行）”。');
+        await api('/api/v1/control/start', { method: 'POST', body: JSON.stringify({ mode }) });
+    });
+    on('btn-bind-actor', async () => {
+        await api('/api/v1/multiplayer/bind', { method: 'POST', body: '{}' });
+        showNotice('已绑定当前世界和自己的农场工；请让真人主机批准该角色，然后以实时模式开始控制。');
     });
     on('btn-takeover', async () => {
         const result = await api<{ closedSessionIds: string[]; pause: { state: string } }>('/api/v1/control/takeover', {

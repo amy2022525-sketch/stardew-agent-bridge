@@ -1,6 +1,6 @@
 {
   "name": "stardew-agent-bridge",
-  "version": "0.1.0",
+  "version": "0.2.0-preview.1",
   "private": true,
   "description": "星露谷本机 SMAPI 桥接 + Web 控制台 + MCP 服务：让支持 MCP 的本地 Agent 观察和游玩星露谷。",
   "license": "MIT",
@@ -29,6 +29,10 @@
     "doctor": "node apps/server/dist/cli.js doctor",
     "pack": "node scripts/pack.mjs",
     "verify:package": "node scripts/verify-package.mjs",
+    "docker:bundle": "node scripts/docker/build.mjs --bundle",
+    "docker:build": "node scripts/docker/build.mjs --target bridge-runtime",
+    "docker:inspect": "node scripts/docker/inspect-image.mjs",
+    "docker:manage": "node scripts/docker/manage.mjs",
     "install:mod": "node scripts/install-mod.mjs",
     "rollback:mod": "node scripts/rollback-mod.mjs",
     "desktop": "node scripts/linux/desktop-entry.mjs"

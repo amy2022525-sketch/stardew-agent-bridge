@@ -1,0 +1,81 @@
+# Docker 单人预览：相关 push/PR 自动验证，图形镜像可手动追加。
+# 不推送镜像、不登录 registry、不做任何发布；真实游戏验收（G/A/H）永远不在此运行。
+name: Docker image checks
+on:
+  push:
+    paths: ['docker/**', 'scripts/docker/**', 'apps/**', 'packages/**', 'adapters/**', 'package*.json', '.dockerignore', '.github/workflows/docker.yml']
+  pull_request:
+    paths: ['docker/**', 'scripts/docker/**', 'apps/**', 'packages/**', 'adapters/**', 'package*.json', '.dockerignore', '.github/workflows/docker.yml']
+  workflow_dispatch:
+    inputs:
+      build-game-runtime:
+        description: '同时构建 game-runtime 镜像（较慢）'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  bundle-and-bridge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.13.0'
+          cache: npm
+      - run: npm ci
+      - name: 编译（TS/Web）
+        run: npm run build
+      - name: 契约与单元测试（含 Docker 事务/网关/Web 纯逻辑）
+        run: npm test
+      - name: bundle 产物与布局自检
+        run: node scripts/docker/build.mjs --bundle --output "$RUNNER_TEMP/docker-bundle"
+      - name: 构建 bridge-runtime 镜像
+        run: node scripts/docker/build.mjs --target bridge-runtime
+      - name: 镜像内容检查（布局/UID/只读/元数据）
+        run: node scripts/docker/inspect-image.mjs --image local/stardew-agent-bridge:bridge-runtime --json
+      - name: 无游戏容器冒烟（健康/live/ready/MCP/401）
+        run: |
+          set -e
+          cp docker/example.env /tmp/sab-ci.env
+          sed -i 's/^SAB_HTTP_PORT=.*/SAB_HTTP_PORT=18055/' /tmp/sab-ci.env
+          compose=(docker compose --project-name sab-ci --project-directory "$GITHUB_WORKSPACE" -f "$GITHUB_WORKSPACE/docker/compose.yaml" --env-file /tmp/sab-ci.env)
+          trap '"${compose[@]}" down' EXIT
+          "${compose[@]}" up -d --no-build
+          for i in $(seq 1 30); do
+            if [ "$(docker inspect --format '{{.State.Health.Status}}' "$("${compose[@]}" ps -q runtime)")" = healthy ]; then break; fi
+            sleep 2
+          done
+          docker inspect --format '{{.State.Health.Status}}' "$("${compose[@]}" ps -q runtime)" | grep -qx healthy
+          curl -sf http://127.0.0.1:18055/container/live | grep -q '"live":true'
+          curl -sf http://127.0.0.1:18055/container/ready | grep -q 'bridge_ready'
+          curl -sS -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:18055/mcp \
+            -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}' | grep -qx 401
+  mod-build-image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - name: 构建 mod-build 工具镜像（只读源码 + NuGet 还原）
+        run: docker build --platform linux/amd64 -f docker/Dockerfile.mod-build --tag local/stardew-agent-bridge:mod-build .
+      - name: 无游戏输入时优雅拒绝（退出码 11）
+        run: |
+          set -e
+          set +e
+          docker run --rm -e SAB_RUN_MODE=game -e SAB_HOME=/var/lib/sab -e HOME=/tmp/sab-home \
+            local/stardew-agent-bridge:mod-build --json > /tmp/modbuild.json
+          result=$?
+          set -e
+          test "$result" -eq 11
+          grep -q 'INPUT_MISSING' /tmp/modbuild.json
+  game-runtime-image:
+    if: ${{ inputs.build-game-runtime }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - name: 构建 game-runtime 镜像（图形栈；不运行游戏）
+        run: docker build --platform linux/amd64 --target game-runtime -f docker/Dockerfile --tag local/stardew-agent-bridge:game-runtime .
+      # 真实图形/游戏验收需要合法 Linux 游戏输入，只在本机由人工执行（docs/DOCKER_ACCEPTANCE.md）。

@@ -28,7 +28,7 @@ describe('Web MCP 连接', () => {
         const body = await info.text();
         assert.ok(!body.includes(stack.token));
         assert.ok(!body.includes(stack.bridge.auth.modToken));
-        assert.equal((JSON.parse(body) as { toolCount: number }).toolCount, 28);
+        assert.equal((JSON.parse(body) as { toolCount: number }).toolCount, 29);
         assert.equal((await fetch(base + '/api/v1/mcp/config', { method: 'POST', headers: { cookie, 'content-type': 'application/json' }, body: '{}' })).status, 403);
         assert.equal((await fetch(base + '/api/v1/mcp/check', { method: 'POST', headers: { cookie, 'content-type': 'application/json' }, body: '{"transport":"http"}' })).status, 403);
         assert.equal((await fetch(base + '/api/v1/mcp', { headers: { cookie, origin: 'https://untrusted.example' } })).status, 403);
@@ -47,7 +47,7 @@ describe('Web MCP 连接', () => {
         const client = new Client({ name: 'web-config-test', version: '1.0.0' });
         try {
             await client.connect(new StreamableHTTPClientTransport(new URL(stardew.url), { authProvider: { token: async () => config.token } }));
-            assert.equal((await client.listTools()).tools.length, 28);
+            assert.equal((await client.listTools()).tools.length, 29);
             assert.deepEqual((await (await request('/api/v1/mcp')).json() as { clients: unknown[] }).clients, []);
             assert.notEqual((await client.callTool({ name: 'stardew_status', arguments: {} })).isError, true);
         } finally { await client.close(); }
@@ -68,13 +68,13 @@ describe('Web MCP 连接', () => {
         assert.equal((await request('/api/v1/mcp/check', { transport: 'invalid' })).status, 400);
     });
 
-    it('HTTP 检测真实完成握手、28 工具发现和只读调用，不将自检冒充 Agent 接入', async () => {
+    it('HTTP 检测真实完成握手、29 工具发现和只读调用，不将自检冒充 Agent 接入', async () => {
         const { stack, request } = await setup(false);
         const response = await request('/api/v1/mcp/check', { transport: 'http' });
         assert.equal(response.status, 200);
         const result = await response.json() as { ok: boolean; toolCount: number; saveLoaded: boolean; transport: string };
         assert.equal(result.ok, true);
-        assert.equal(result.toolCount, 28);
+        assert.equal(result.toolCount, 29);
         assert.equal(result.transport, 'http');
         assert.equal(result.saveLoaded, false);
         const info = await (await request('/api/v1/mcp')).json() as { clients: unknown[]; checks: { http: { ok: boolean } } };
@@ -90,7 +90,7 @@ describe('Web MCP 连接', () => {
         assert.equal(response.status, 200);
         const result = await response.json() as { ok: boolean; toolCount: number; transport: string };
         assert.equal(result.ok, true);
-        assert.equal(result.toolCount, 28);
+        assert.equal(result.toolCount, 29);
         assert.equal(result.transport, 'stdio');
         assert.equal(stack.bridge.control.activeSession, null);
         assert.equal(stack.mod.commandCount('acquire'), 0);

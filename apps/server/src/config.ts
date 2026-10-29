@@ -32,6 +32,12 @@ export interface BridgeConfig {
     logLevel: 'debug' | 'info' | 'warn' | 'error';
     web: { enabled: boolean };
     dev: { exposeDebugCommands: boolean };
+    /**
+     * 可选（容器部署）：外部展示根地址，例如 http://127.0.0.1:18055。
+     * 缺省时保持原有回环行为；旧 config.json 无此字段也能正常启动。
+     * 仅影响展示与配置导出，不影响锁复用、内部探测或 MCP 自检地址。
+     */
+    publicBaseUrl?: string;
 }
 
 export const DEFAULT_CONFIG: BridgeConfig = {
@@ -66,20 +72,24 @@ function clampInt(value: unknown, fallback: number, min: number, max: number): n
 }
 
 export function loadConfig(paths: DataPaths): BridgeConfig {
+    let raw: unknown = DEFAULT_CONFIG;
     if (!existsSync(paths.config)) {
         writeFileAtomicSafe(paths.config, `${JSON.stringify(DEFAULT_CONFIG, null, 2)}\n`, PUBLIC_FILE_MODE);
-        return { ...DEFAULT_CONFIG };
-    }
-    let raw: unknown;
-    try {
-        raw = JSON.parse(readFileSync(paths.config, 'utf8').replace(/^\uFEFF/, ''));
-    } catch (error) {
-        throw new Error(`config.json 无法解析：${error instanceof Error ? error.message : String(error)}`);
+    } else {
+        try {
+            raw = JSON.parse(readFileSync(paths.config, 'utf8').replace(/^\uFEFF/, ''));
+        } catch (error) {
+            throw new Error(`config.json 无法解析：${error instanceof Error ? error.message : String(error)}`);
+        }
     }
     const record = (raw ?? {}) as Record<string, unknown>;
     const web = (record.web ?? {}) as Record<string, unknown>;
     const dev = (record.dev ?? {}) as Record<string, unknown>;
     const level = record.logLevel;
+    // 显式环境优先于持久化展示地址，首次启动也采用同一条解析路径。
+    // 非 Docker 启动两者都没有，则保持原有回环行为。
+    const publicBaseUrl =
+        process.env.SAB_PUBLIC_BASE_URL || (typeof record.publicBaseUrl === 'string' ? record.publicBaseUrl : '');
     return {
         schemaVersion: CONTRACTS_SCHEMA_VERSION,
         bridgePort: clampInt(record.bridgePort, DEFAULT_CONFIG.bridgePort, 1024, 65535),
@@ -88,7 +98,10 @@ export function loadConfig(paths: DataPaths): BridgeConfig {
         leaseTtlMs: clampInt(record.leaseTtlMs, DEFAULT_CONFIG.leaseTtlMs, 30_000, 3_600_000),
         logLevel: level === 'debug' || level === 'info' || level === 'warn' || level === 'error' ? level : 'info',
         web: { enabled: web.enabled !== false },
-        dev: { exposeDebugCommands: dev.exposeDebugCommands === true }
+        dev: { exposeDebugCommands: dev.exposeDebugCommands === true },
+        // 可选容器展示地址：非法值不在这里抛错（保持旧启动路径兼容），
+        // 由容器预检在业务初始化前用 container-addresses 的严格解析拒绝。
+        ...(publicBaseUrl.trim().length > 0 ? { publicBaseUrl: publicBaseUrl.trim() } : {})
     };
 }
 

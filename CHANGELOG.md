@@ -1,5 +1,23 @@
 # 变更记录
 
+## 0.2.0-preview.1 — 2026-10-29
+
+- 合并独立 MP1 与 Docker 工作区，保留原生单人能力、Web MCP 连接与 Linux 平台层；统一应用/Mod/镜像版本。
+- 联机原生门与明确 Warp TouchAction 增加目的地政策检查。切图时立即释放输入和旧控制权，仅对匹配目标做只读落点确认；不重放动作、不宣称主机保存。未知触发器继续拒绝。
+- 许可失效清理在途授予代次；首次申请提示等待短许可再 start，修正绑定即时生效和账本回退说明，记录升级备份路径。
+- Docker 提供 bridge-runtime/game-runtime/mod-build、受限网关、supervisor、私有配置、离线备份与恢复、noVNC 辅助通道及 Web 状态。修复默认 bundle 输出解析和 CI 的 Compose 上下文/预期 401/退出码检查。
+- 补齐 Docker 安装、架构、验收、跨平台支持矩阵与各发行包。真实 Linux 游戏、完整 Agent 玩法和双客户端联机仍标记待验收；本版按预览发布。
+
+## 2026-10-25：联机 MP1 源码实现与缺口修复（未发布，未实机验收）
+
+> 在 `work/multiplayer-mp1-20261024` 联机工作区（基线 63a4f36）实现：构建通过、Node 149 项（144 过/0 败/5 跳）、C# 149 checks、真实游戏程序集编译 0 警告 0 错误、安装器 17 项、打包与包校验通过。**双客户端实机联机验收未开始**；详见 docs/MULTIPLAYER_IMPLEMENTATION_HANDOVER_20261024.md 与 docs/MULTIPLAYER_TAKEOVER_UPDATE_20261024.md。
+
+- Mod 联机纯状态机 `SessionMachine`：host/participant 握手、角色绑定与主机政策双层许可、短许可（按请求发出时间计 TTL、按实际期限提前续期）、acquire 代次防旧授予借用、撤权/换图/保存跨日屏障、连续控制预算跨重连、有界主机位置观察（actionAttribution=unproven）。
+- Mod 联机运行时 `MultiplayerRuntime`：政策文件原子写入（.NET 6 libc chmod）、主机本地 `sab_mp` 控制台、MP1 写动作中央 guard（政策×能力矩阵交集，商店/箱子/钓鱼/战斗默认拒绝）、hello 能力声明按真实可执行口径（writeCommands + writeCommandsReason）。
+- Bridge/契约：本地协议 v2（联机身份上下文）、schema 2 回执（confirmationScope/durability=not_saved/不宣称主机已确认）、actor 作用域去重键与墓碑、账本 v1→v2 增量迁移（VACUUM INTO 先备份）、角色不匹配回执统一归一 unknown、诊断导出脱敏联机身份、Web 多作用域 actionId 查询返回结构化 409。
+- 工具面 28→29：新增只读 `stardew_multiplayer`；Web 新增联机面板与本地绑定端点（网页会话 + CSRF + 同源）；MP 控制必须显式 `mode=realtime`。
+- 新增文档：docs/MULTIPLAYER_INSTALL.md、docs/MULTIPLAYER_ACCEPTANCE.md（A–G 验收脚本）；pack 白名单（Windows/Linux）与 verify-package 工具数断言同步为 29。
+
 ## 2026-10-24：Linux 源码预览与首轮验证
 
 > Ubuntu 24.04 / WSL2：构建通过，136 项 Node 测试、20 项安装/恢复测试与19项无游戏便携包检查通过。Windows 构建、Mod 编译和基础回归已有通过记录。当前只同步源码预览；原生 Linux 游戏、图形浏览器、真实 Agent 与完整安装包仍待验收，见 [LINUX_VALIDATION_REPORT.md](LINUX_VALIDATION_REPORT.md)。
