@@ -52,3 +52,5 @@ node scripts/docker/inspect-image.mjs --image local/stardew-agent-bridge:bridge-
 `tests/src/docker-*` 覆盖真实 HTTP 网关、SSE、配置、维护命令、种子/备份事务、supervisor、Web 纯逻辑。纯状态机测试不替代真实进程/浏览器/游戏。`.github/workflows/docker.yml` 对相关 push/PR 构建 Bridge 与 Mod 工具镜像；完整图形镜像可手动勾选。CI 不包含游戏输入、存档或账号，不推送 registry。
 
 发布三个 `docker save` 的 gzip 镜像归档、Docker 源码工具包和 SHA256SUMS。仅从当前提交的白名单源码生成工具包；不得从整个工作目录打包（容易混入凭据或游戏）。镜像内保留 Node/第三方许可证与 OS 包清单。GitHub source zip 与可安装产物含义不同，发布说明应逐一列出平台和验收边界。
+
+`.github/workflows/release-docker.yml` 是手动附件工作流：输入已有预发布草稿的数字 ID 和完整代码 SHA，矩阵构建三个镜像，导出 gzip 与 `DockerImage-*.json`（来源 SHA、镜像 ID、包哈希、大小），直接上传到该草稿。它两次确认目标仍为 draft/prerelease，不执行发布；也不登录镜像仓库、不接触游戏或存档。维护者核对最终源码、原生包、这些 provenance 文件与 SHA256SUMS 后再发布。最终文档提交可以晚于镜像代码提交，必须在发布清单中同时记录两者。

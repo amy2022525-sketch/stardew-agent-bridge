@@ -42,6 +42,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.source_commit }}
+      - uses: actions/checkout@v7
+        if: matrix.target == 'game-runtime'
+        with:
+          ref: ${{ github.sha }}
+          path: release-tools
       - name: Build and export one image (no proprietary inputs)
         shell: bash
         run: |
@@ -62,6 +67,30 @@ jobs:
           gzip -t "$archive"
           docker image inspect "$image" > "$RUNNER_TEMP/image-inspect.json"
           echo "ARCHIVE=$archive" >> "$GITHUB_ENV"
+      - name: Real noVNC browser acceptance on the image being uploaded
+        if: matrix.target == 'game-runtime'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/desktop-deps" --no-save --ignore-scripts --no-audit --no-fund playwright@1.62.1 ws@8.22.0
+          password="$RUNNER_TEMP/vnc-password"
+          openssl rand -hex 4 > "$password"
+          chmod 600 "$password"
+          sudo chown 1000:1000 "$password"
+          # Runner user still needs to read the password for the browser test.
+          sudo cp "$password" "$RUNNER_TEMP/browser-password"
+          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/browser-password"
+          trap 'docker logs sab-release-desktop || true; docker rm -f sab-release-desktop >/dev/null 2>&1 || true' EXIT
+          docker run -d --name sab-release-desktop --user 1000:1000 --read-only --cap-drop ALL \
+            --security-opt no-new-privileges:true --tmpfs /tmp:rw,nosuid,nodev,mode=1777 --memory 512m --pids-limit 128 \
+            --no-healthcheck -p 127.0.0.1:18680:6080 -e SAB_NOVNC_PORT=18680 \
+            --mount "type=bind,source=$password,target=/run/secrets/sab_vnc_password,readonly" \
+            --mount "type=bind,source=$GITHUB_WORKSPACE/release-tools/tests/scripts/docker-desktop-entry.sh,target=/qa/entry.sh,readonly" \
+            --entrypoint /bin/bash local/stardew-agent-bridge:game-runtime /qa/entry.sh
+          for i in $(seq 1 40); do if curl -sf http://127.0.0.1:18680/vnc.html > /dev/null; then break; fi; sleep 0.5; done
+          SAB_QA_DEPS="$RUNNER_TEMP/desktop-deps" SAB_QA_PASSWORD_FILE="$RUNNER_TEMP/browser-password" \
+            SAB_CHROMIUM_EXECUTABLE="$(command -v google-chrome)" SAB_QA_OUTPUT="$RUNNER_TEMP/docker-desktop.json" \
+            node release-tools/tests/scripts/docker-desktop-browser.mjs
       - name: Write public image provenance
         shell: bash
         run: |
@@ -80,6 +109,12 @@ jobs:
             architecture: raw.Architecture, os: raw.Os, archive: path.basename(env.ARCHIVE),
             bytes: fs.statSync(env.ARCHIVE).size, sha256: hash.digest('hex'),
             workflowRun: `https://github.com/${env.GH_REPO}/actions/runs/${env.GITHUB_RUN_ID}` };
+          const desktop = path.join(env.RUNNER_TEMP, 'docker-desktop.json');
+          if (env.TARGET === 'game-runtime') {
+            result.desktopValidation = JSON.parse(fs.readFileSync(desktop, 'utf8'));
+            if (!result.desktopValidation.ok) throw new Error('Desktop acceptance failed');
+            result.desktopTestCommit = env.GITHUB_SHA;
+          }
           const output = path.join(env.RUNNER_TEMP, `DockerImage-${env.TARGET}.json`);
           fs.writeFileSync(output, JSON.stringify(result, null, 2) + '\n');
           fs.appendFileSync(env.GITHUB_ENV, `IMAGE_METADATA=${output}\n`);
