@@ -63,6 +63,14 @@ function removeOwner(directory: string, ownerFile: string): void {
     try { unlinkSync(ownerFile); } catch {}
     try { rmdirSync(directory); } catch {}
 }
+function retryableWindowsIo(error: unknown): boolean {
+    return process.platform === 'win32' && ['EPERM', 'EACCES', 'EBUSY', 'ENOTEMPTY'].includes((error as NodeJS.ErrnoException).code ?? '');
+}
+function waitForWindowsIo(): void {
+    // Startup is synchronous and precedes the ledger. A bounded 10ms pause lets
+    // Windows finish releasing directory handles without changing ownership.
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+}
 function recoverOwnerDirectory(directory: string, deps: InstanceLockDeps): boolean {
     let names: string[];
     try { names = readdirSync(directory); } catch { return !existsSync(directory); }
@@ -82,7 +90,16 @@ function recoverOwnerDirectory(directory: string, deps: InstanceLockDeps): boole
         // 文件名含唯一 nonce。目录换代后，不会误删新实例的 owner。
         try { unlinkSync(path.join(directory, name)); } catch {}
     }
-    try { rmdirSync(directory); return true; } catch { return !existsSync(directory); }
+    for (let attempt = 0; attempt < 12; attempt++) {
+        try { rmdirSync(directory); return true; } catch (error) {
+            if (!existsSync(directory)) return true;
+            if (!retryableWindowsIo(error)) return false;
+            // Never wait on or remove a newly published nonempty owner's directory.
+            try { if (readdirSync(directory).length > 0) return false; } catch { return !existsSync(directory); }
+            waitForWindowsIo();
+        }
+    }
+    return !existsSync(directory);
 }
 export function acquireInstanceLock(input: AcquireLockInput): AcquireLockResult {
     const deps = input.deps ?? {};
@@ -104,7 +121,7 @@ export function acquireInstanceLock(input: AcquireLockInput): AcquireLockResult 
     try {
         mkdirSync(candidate, { mode: 0o700 });
         writeLockFile(candidateOwner, record);
-        for (let attempt = 0; attempt < 4; attempt++) {
+        for (let attempt = 0; attempt < 24; attempt++) {
             try { renameSync(candidate, directory); } catch (error) {
                 // Linux 返回 ENOTEMPTY，Windows 还可能返回 EACCES/EPERM。
                 // 只有目标确实存在时才走锁恢复，不能掩盖其他写入错误。
@@ -112,6 +129,7 @@ export function acquireInstanceLock(input: AcquireLockInput): AcquireLockResult 
                     if (recoverOwnerDirectory(directory, deps)) continue;
                     return held();
                 }
+                if (retryableWindowsIo(error)) { waitForWindowsIo(); continue; }
                 return { acquired: false, reason: 'unwritable', record: null, message: String(error) };
             }
             try {

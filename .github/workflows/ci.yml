@@ -23,6 +23,13 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+      - name: Windows lock recovery contention regression
+        shell: pwsh
+        run: |
+          for ($iteration = 1; $iteration -le 5; $iteration++) {
+            node --test tests/dist/src/lock-concurrency.test.js
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
       - run: npm run test:mod
       - run: npm run test:installer
       # The actual game Mod requires the user's local game assemblies.
