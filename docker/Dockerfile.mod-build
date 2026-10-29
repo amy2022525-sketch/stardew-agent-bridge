@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-ARG NODE_IMAGE=node:22.13.0-bookworm-slim
+ARG NODE_IMAGE=node:22.13.0-bookworm-slim@sha256:f5a0871ab03b035c58bdb3007c3d177b001c2145c18e81817b71624dcf7d8bff
 FROM ${NODE_IMAGE} AS node-runtime
 FROM mcr.microsoft.com/dotnet/sdk:8.0.415-bookworm-slim
 ARG SAB_UID=1000

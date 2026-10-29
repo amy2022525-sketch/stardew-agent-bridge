@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-ARG NODE_IMAGE=node:22.13.0-bookworm-slim
+ARG NODE_IMAGE=node:22.13.0-bookworm-slim@sha256:f5a0871ab03b035c58bdb3007c3d177b001c2145c18e81817b71624dcf7d8bff
 FROM ${NODE_IMAGE} AS source-build
 WORKDIR /src
 ENV npm_config_audit=false npm_config_fund=false npm_config_update_notifier=false
@@ -23,7 +23,7 @@ ENV SAB_SOURCE_COMMIT=${SAB_SOURCE_COMMIT} SAB_BUILD_TIMESTAMP=${SAB_BUILD_TIMES
 RUN node scripts/docker/build.mjs --bundle --output /out
 
 # Use a clean glibc runtime: no npm, node_modules, SDK or source tree.
-FROM debian:bookworm-slim AS bridge-runtime
+FROM debian:bookworm-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8 AS bridge-runtime
 ARG SAB_UID=1000
 ARG SAB_GID=1000
 ARG SAB_SOURCE_COMMIT=unknown

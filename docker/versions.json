@@ -25,11 +25,12 @@
   "components": {
     "node": {
       "image": "node:22.13.0-bookworm-slim",
+      "pinnedDigest": "sha256:f5a0871ab03b035c58bdb3007c3d177b001c2145c18e81817b71624dcf7d8bff",
       "minimum": "22.13.0",
       "reason": "项目使用 node:sqlite；22.13 起不再需要 --experimental-sqlite，且 engines 要求 >=22.13.0。",
       "source": "仓库 package.json engines + packages/platform/src/runtime.ts"
     },
-    "baseOs": { "image": "debian:bookworm-slim（随 node 镜像）", "libc": "glibc 2.36" },
+    "baseOs": { "image": "debian:bookworm-slim", "pinnedDigest": "sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8", "libc": "glibc 2.36", "pinVerifiedAt": "2026-10-29", "pinEvidence": "本机官方镜像 RepoDigests；运行时镜像显式固定摘要，避免浮动 tag 改变基础文件系统。" },
     "flock": {
       "package": "util-linux",
       "usedFor": "跨容器卷租约（--no-fork -n -E 13）",
