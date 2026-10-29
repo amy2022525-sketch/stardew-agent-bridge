@@ -36,7 +36,7 @@ Linux 环境为 Ubuntu 24.04 WSL2，Node 22.13.0；源码在 ext4 中以 UID 100
 
 GitHub 此前没有标签/Release，因此本次建立一个统一预览版，不补造未曾存在的历史版本。下载项包括 Windows 完整包、Linux x64 完整包、独立 Mod、Docker 源码/Compose 工具包和 bridge-runtime / game-runtime / mod-build 三个 linux/amd64 离线镜像；另附 3 份 `DockerImage-*.json` 来源证明、外层 SHA256SUMS 与发布清单，合计 12 个附件。Windows 使用系统 Node >=22.13；Linux 自带 Node。
 
-镜像/包不包含游戏 DLL、Steam/SMAPI 安装文件、玩家存档、真实凭据或现有数据卷。源码归档不包括 node_modules、构建缓存和私人配置。最终镜像代码为 `e241afacf44176827e368cf7af5b6e0d7b4b6cf4`，其后仅更新验证/安装文档；发行源码提交和镜像来源同时记录在清单。Linux 完整包可由手动 CI 从同版、已校验 SHA 的独立 Mod ZIP 复用本项目程序集，并下载/校验官方 Node 后执行完整包的 19 项验证；不上传游戏引用。Windows `SkipMod` 也只跳过重新编译，仍必须带入匹配版本的已编译 Mod。发行页直接附完整镜像，不要求用户从 Actions 下载过期工件，也不要求镜像仓库登录。
+镜像/包不包含游戏 DLL、Steam/SMAPI 安装文件、玩家存档、真实凭据或现有数据卷。源码归档不包括 node_modules、构建缓存和私人配置。最终镜像代码为 `e241afacf44176827e368cf7af5b6e0d7b4b6cf4`，其后修正 Windows 打包脚本读取中文 manifest 时的 UTF-8 参数并更新发布文档，服务与 Mod 代码无变化；发行源码提交和镜像来源同时记录在清单。Linux 完整包可由手动 CI 从同版、已校验 SHA 的独立 Mod ZIP 复用本项目程序集，并下载/校验官方 Node 后执行完整包的 19 项验证；不上传游戏引用。Windows `SkipMod` 也只跳过重新编译，仍必须带入匹配版本的已编译 Mod。发行页直接附完整镜像，不要求用户从 Actions 下载过期工件，也不要求镜像仓库登录。
 
 ## 4. 仍未验收
 

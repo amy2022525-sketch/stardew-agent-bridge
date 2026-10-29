@@ -61,7 +61,7 @@ if (-not $SkipMod) {
 }
 $modArtifacts = Join-Path $repo 'artifacts\mod\StardewAgentBridge'
 if (-not (Test-Path (Join-Path $modArtifacts 'StardewAgentBridge.dll'))) { throw 'Mod 产物缺失：SkipMod 只跳过重新编译，不能省略 Mod。' }
-$modManifest = Get-Content (Join-Path $modArtifacts 'manifest.json') -Raw | ConvertFrom-Json
+$modManifest = Get-Content (Join-Path $modArtifacts 'manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 if ($modManifest.Version -ne $version) { throw 'Mod 产物版本与当前发行版本不一致。' }
 Copy-Item (Join-Path $modArtifacts '*') (Join-Path $out 'mod') -Recurse -Force
 
