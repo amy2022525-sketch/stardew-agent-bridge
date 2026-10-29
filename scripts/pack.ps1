@@ -10,6 +10,7 @@
 param(
     [string]$GamePath,
     [switch]$SkipTests,
+    # Reuse an existing verified artifacts/mod output; the full package still includes it.
     [switch]$SkipMod
 )
 
@@ -57,8 +58,12 @@ if (-not $SkipMod) {
     if ($GamePath) { $modSplat['GamePath'] = $GamePath }
     & (Join-Path $PSScriptRoot 'build-mod.ps1') @modSplat | Out-Host
     if ($LASTEXITCODE -ne 0) { throw 'Mod 构建失败。' }
-    Copy-Item (Join-Path $repo 'artifacts\mod\StardewAgentBridge\*') (Join-Path $out 'mod') -Recurse -Force
 }
+$modArtifacts = Join-Path $repo 'artifacts\mod\StardewAgentBridge'
+if (-not (Test-Path (Join-Path $modArtifacts 'StardewAgentBridge.dll'))) { throw 'Mod 产物缺失：SkipMod 只跳过重新编译，不能省略 Mod。' }
+$modManifest = Get-Content (Join-Path $modArtifacts 'manifest.json') -Raw | ConvertFrom-Json
+if ($modManifest.Version -ne $version) { throw 'Mod 产物版本与当前发行版本不一致。' }
+Copy-Item (Join-Path $modArtifacts '*') (Join-Path $out 'mod') -Recurse -Force
 
 foreach ($doc in @('README.md', 'README.en.md', 'LICENSE', 'NOTICE.md', 'CHANGELOG.md', 'FINAL_TEST_REPORT.md')) {
     $source = Join-Path $repo $doc
