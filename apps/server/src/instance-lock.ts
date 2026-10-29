@@ -45,12 +45,22 @@ export function isInstanceLockStale(record: InstanceLockRecord, deps: InstanceLo
     if (!current) return true;
     return current.startTime !== null && current.startTime !== record.processStart;
 }
-export function writeLockFile(file: string, record: InstanceLockRecord): void {
+export function writeLockFile(file: string, record: InstanceLockRecord,
+    deps: { platform?: PlatformId; rename?: typeof renameSync } = {}): void {
     const tmp = file + '.tmp-' + randomUUID();
     const fd = openSync(tmp, 'wx', 0o600);
     try {
         try { writeSync(fd, JSON.stringify(record) + '\n'); } finally { closeSync(fd); }
-        renameSync(tmp, file);
+        // Windows readers or antivirus can briefly deny replacement even after
+        // the owner directory is acquired. Keep the old record intact and retry
+        // the atomic rename; unlinking the destination would create another gap.
+        const rename = deps.rename ?? renameSync;
+        for (let attempt = 0; ; attempt++) {
+            try { rename(tmp, file); break; } catch (error) {
+                if (attempt >= 49 || !retryableWindowsIo(error, deps.platform)) throw error;
+                waitForWindowsIo();
+            }
+        }
     } catch (error) {
         try { unlinkSync(tmp); } catch {}
         throw error;
@@ -63,8 +73,8 @@ function removeOwner(directory: string, ownerFile: string): void {
     try { unlinkSync(ownerFile); } catch {}
     try { rmdirSync(directory); } catch {}
 }
-function retryableWindowsIo(error: unknown): boolean {
-    return process.platform === 'win32' && ['EPERM', 'EACCES', 'EBUSY', 'ENOTEMPTY'].includes((error as NodeJS.ErrnoException).code ?? '');
+function retryableWindowsIo(error: unknown, platform: string = process.platform): boolean {
+    return platform === 'win32' && ['EPERM', 'EACCES', 'EBUSY', 'ENOTEMPTY'].includes((error as NodeJS.ErrnoException).code ?? '');
 }
 function waitForWindowsIo(): void {
     // Startup is synchronous and precedes the ledger. A bounded 10ms pause lets

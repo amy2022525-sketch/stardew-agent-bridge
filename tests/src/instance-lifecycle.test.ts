@@ -10,7 +10,7 @@
  * 全程不启动真实 Bridge、不占用固定端口、不写用户数据目录。
  */
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
@@ -24,6 +24,7 @@ import {
     probeHealth,
     readEndpoint,
     readInstanceLock,
+    writeLockFile,
     type LaunchDeps
 } from '@sab/server';
 
@@ -236,6 +237,51 @@ async function withHealthServer(
         await new Promise<void>((resolve) => server.close(() => resolve()));
     }
 }
+
+describe('Windows 锁记录原子替换遇到临时访问拒绝', () => {
+    const record = { schemaVersion: 1, pid: process.pid, nonce: 'new-owner', dataRoot: '',
+        programVersion: '0.2.0-preview.1', entry: '', startedAt: '', processStart: null };
+
+    it('读者短暂占用时保留旧记录，随后发布新记录', () => {
+        const root = tempRoot('rename-retry');
+        const file = path.join(root, 'bridge.lock');
+        const previous = JSON.stringify({ ...record, nonce: 'old-owner' });
+        writeFileSync(file, previous);
+        const transientCodes = ['EPERM', 'EACCES', 'EBUSY'];
+        let calls = 0;
+        writeLockFile(file, record, { platform: 'win32', rename: (from, to) => {
+            assert.equal(readFileSync(file, 'utf8'), previous, '重试期间旧记录必须保持完整');
+            const code = transientCodes[calls++];
+            if (code) throw Object.assign(new Error('temporarily busy'), { code });
+            renameSync(from, to);
+        } });
+        assert.equal(calls, 4);
+        assert.equal(readInstanceLock(file)?.nonce, record.nonce);
+        assert.deepEqual(readdirSync(root), ['bridge.lock']);
+    });
+
+    for (const scenario of [
+        { platform: 'win32' as const, code: 'EPERM', calls: 50 },
+        { platform: 'linux' as const, code: 'EPERM', calls: 1 },
+        { platform: 'win32' as const, code: 'ENOSPC', calls: 1 }
+    ]) {
+        it(`${scenario.platform}/${scenario.code} 持续失败时有界退出并保留旧记录`, () => {
+            const root = tempRoot('rename-denied');
+            const file = path.join(root, 'bridge.lock');
+            const previous = JSON.stringify({ ...record, nonce: 'old-owner' });
+            writeFileSync(file, previous);
+            let calls = 0;
+            const failure = Object.assign(new Error('rename denied'), { code: scenario.code });
+            assert.throws(() => writeLockFile(file, record, {
+                platform: scenario.platform,
+                rename: () => { calls++; throw failure; }
+            }), failure);
+            assert.equal(calls, scenario.calls);
+            assert.equal(readFileSync(file, 'utf8'), previous);
+            assert.deepEqual(readdirSync(root), ['bridge.lock'], '失败的临时记录必须清理');
+        });
+    }
+});
 
 describe('健康探测（只读）', () => {
     it('返回 ok 与存档状态字段', async () => {
