@@ -13,6 +13,9 @@
 !adapters/**
 !scripts/
 !scripts/**
+!skills/
+!skills/stardew-player/
+!skills/stardew-player/**
 !tests/
 !tests/**
 !mods/
@@ -26,6 +29,7 @@
 **/bin
 **/obj
 **/work
+**/playlogs
 **/artifacts
 **/.env
 **/.env.*

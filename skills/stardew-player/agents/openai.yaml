@@ -1,0 +1,4 @@
+interface:
+  display_name: "星露谷游玩助手"
+  short_description: "通过 MCP 玩星露谷，结合季节攻略制定目标并维护短期接续与长期经验日志"
+  default_prompt: "使用 $stardew-player 接手当前星露谷存档，先读两层日志并核对世界状态，再推进一个可核验的小目标并更新游玩日志。"

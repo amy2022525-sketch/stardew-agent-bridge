@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { collectPlayerSkill, PLAYER_SKILL_FILES } from '../collect-player-skill.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 /** 打包产物布局契约（任务书 §6.3）。supervisor/healthcheck/lease-entrypoint 引用的入口必须与之一致。 */
@@ -43,6 +44,9 @@ export function verifyBundleLayout(output) {
     }
     for (const required of ['web/index.html', 'metadata/versions.json', 'metadata/build-info.json', 'metadata/bundled-dependencies.json', 'licenses/LICENSE', 'licenses/NOTICE.md']) {
         if (!existsSync(path.join(output, required))) missing.push(required);
+    }
+    for (const resource of PLAYER_SKILL_FILES) {
+        if (!existsSync(path.join(output, 'skills/stardew-player', resource))) missing.push(`skills/stardew-player/${resource}`);
     }
     if (missing.length) throw new Error(`BUNDLE_LAYOUT_INVALID: 产物缺失 ${missing.join(', ')}`);
     return { ok: true, checked: BUNDLE_LAYOUT.entries.length + runtimeFiles.length };
@@ -85,6 +89,7 @@ export async function bundleRuntime(output) {
     writeFileSync(path.join(output, 'metadata/bundled-dependencies.json'), JSON.stringify([...licenses.values()], null, 2));
     writeFileSync(path.join(output, 'metadata/build-info.json'), JSON.stringify({ specificationVersion: 1, applicationVersion: JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version, sourceCommit: process.env.SAB_SOURCE_COMMIT ?? 'unknown',
         workspaceDirty: process.env.SAB_WORKTREE_DIRTY ?? 'unknown', buildTimestamp: process.env.SAB_BUILD_TIMESTAMP ?? 'unknown', platform: 'linux/amd64', nodeVersion: process.version }, null, 2));
+    collectPlayerSkill(ROOT, output);
     verifyBundleLayout(output);
 }
 export function buildImage({ dockerPath = 'docker', target = 'bridge-runtime', project = 'stardew-agent-bridge', timestamp = new Date().toISOString() } = {}) {

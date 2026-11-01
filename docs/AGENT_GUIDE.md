@@ -2,6 +2,8 @@
 
 这份文档写给**要玩这个游戏的下一个模型**。它不讲协议细节（见 [PROTOCOL.md](PROTOCOL.md)），只讲怎么少踩坑。
 
+持续游玩建议先加载 [stardew-player Skill](../skills/stardew-player/SKILL.md)：结合攻略规划，按世界/角色维护短期检查点与长期经验，恢复时先查日志中的未决动作，再观察真实状态。[导入说明](AI_SKILL.md)。
+
 ## 1. 基本循环
 
 ```

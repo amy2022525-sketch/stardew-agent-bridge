@@ -16,6 +16,8 @@ Let any local MCP-capable agent (DSH, Codex CLI, Claude Code, …) observe and p
 
 English is a summary; the authoritative documents are Chinese (see [README.md](README.md)).
 
+The portable [stardew-player skill](skills/stardew-player/SKILL.md) combines sourced gameplay guidance, MCP operations and required short-term checkpoints plus long-term goals/lessons. See [setup and storage](docs/AI_SKILL.md). It is available on main for DSH, Codex, Claude Code and other agent hosts; existing v0.30 downloads are unchanged. The instructions are currently in Chinese.
+
 ## Architecture
 
 ```

@@ -24,6 +24,8 @@
 
 English: [README.en.md](README.en.md)
 
+给 AI 的游玩技能：[stardew-player](skills/stardew-player/SKILL.md) 包含有来源的攻略、MCP 执行流程与必须维护的短期/长期游玩日志。[导入与使用](docs/AI_SKILL.md)；适用于 DSH、Codex、Claude Code 等主 Agent。当前 main 已提供，旧 v0.30 下载包不自动更新。
+
 ## 1. 结构
 
 ```

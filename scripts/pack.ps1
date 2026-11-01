@@ -69,10 +69,13 @@ foreach ($doc in @('README.md', 'README.en.md', 'LICENSE', 'NOTICE.md', 'CHANGEL
     $source = Join-Path $repo $doc
     if (Test-Path $source) { Copy-Item $source $out }
 }
-foreach ($doc in @('ACCEPTANCE.md', 'AGENT_GUIDE.md', 'CLIENTS.md', 'PROTOCOL.md', 'EVIDENCE.md', 'MIGRATION.md', 'TROUBLESHOOTING.md', 'MULTIPLAYER_INSTALL.md', 'MULTIPLAYER_ACCEPTANCE.md', 'DOCKER_INSTALL.md', 'PLATFORM_MATRIX.md', 'RELEASE_VALIDATION_20261029.md', 'RELEASE_VALIDATION_20261101.md', 'RELEASE_NOTES_v0.30.md', 'DECISION_EXECUTOR.md', 'DECISION_EXECUTOR_ACCEPTANCE.md')) {
+foreach ($doc in @('ACCEPTANCE.md', 'AGENT_GUIDE.md', 'AI_SKILL.md', 'CLIENTS.md', 'PROTOCOL.md', 'EVIDENCE.md', 'MIGRATION.md', 'TROUBLESHOOTING.md', 'MULTIPLAYER_INSTALL.md', 'MULTIPLAYER_ACCEPTANCE.md', 'DOCKER_INSTALL.md', 'PLATFORM_MATRIX.md', 'RELEASE_VALIDATION_20261029.md', 'RELEASE_VALIDATION_20261101.md', 'RELEASE_NOTES_v0.30.md', 'DECISION_EXECUTOR.md', 'DECISION_EXECUTOR_ACCEPTANCE.md')) {
     $source = Join-Path $repo "docs\$doc"
     if (Test-Path $source) { Copy-Item $source (Join-Path $out 'docs') }
 }
+
+& node scripts/collect-player-skill.mjs $repo $out | Out-Host
+if ($LASTEXITCODE -ne 0) { throw 'AI 游玩 Skill 资源收集失败。' }
 
 @'
 启动（Windows，需 Node.js 22.13 或更高版本）：
