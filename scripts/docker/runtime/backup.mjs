@@ -55,7 +55,7 @@ export function createBackup({ dest = LAYOUT.backups, targets = ['data', 'home']
         atomicWriteJson(path.join(root, 'metadata', 'versions.json'), metadata);
         files.push({ path: 'metadata/versions.json', size: statSync(path.join(root, 'metadata', 'versions.json')).size, sha256: sha256OfFile(path.join(root, 'metadata', 'versions.json')), mode: '0600' });
         const manifest = { schemaVersion: 1, backupId: id, createdAt: isoNow(), sourceCommit: metadata.build?.sourceCommit ?? null,
-            bridgeVersion: deps.bridgeVersion ?? '0.3.0', gameVersion: metadata.workdir?.gameVersion ?? null,
+            bridgeVersion: deps.bridgeVersion ?? '0.3.5', gameVersion: metadata.workdir?.gameVersion ?? null,
             modVersion: metadata.workdir?.modVersion ?? null, offlineConfirmed: true, sections: targets, files };
         atomicWriteJson(path.join(root, 'backup.json'), manifest);
         // COMPLETE is last and binds exactly this manifest. Partial directories are never restorable.
@@ -148,7 +148,7 @@ export function recoverRestore(deps = {}) {
 
 export function restoreBackup({ from, targets, isVolumeBusy } = {}, deps = {}) {
     if (!lease(deps) || isVolumeBusy?.()) return failure('OWNERSHIP_CONFLICT', '离线恢复需要全程持有数据卷租约。');
-    const verified = verifyBackup(from, { bridgeVersion: deps.bridgeVersion ?? '0.3.0' });
+    const verified = verifyBackup(from, { bridgeVersion: deps.bridgeVersion ?? '0.3.5' });
     if (!verified.ok) return verified;
     try {
         if (restorePending(deps)) return failure('RECOVERY_REQUIRED', '存在未完成恢复；先执行 recover-restore。');

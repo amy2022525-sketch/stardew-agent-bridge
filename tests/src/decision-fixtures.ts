@@ -74,7 +74,7 @@ export function snapshot(overrides: Partial<SnapshotSummary> = {}): SnapshotSumm
 export function status(overrides: Partial<BridgeStatus> = {}): BridgeStatus {
     return {
         ok: true,
-        bridgeVersion: '0.3.0',
+        bridgeVersion: '0.3.5',
         contractsSchemaVersion: 1,
         startedAt: '2026-10-30T00:00:00.000Z',
         now: '2026-10-30T01:00:00.000Z',

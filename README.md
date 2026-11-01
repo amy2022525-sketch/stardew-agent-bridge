@@ -1,8 +1,8 @@
 # Stardew Agent Bridge
 
-> **v0.30（程序版本 0.3.0，预览）**：新增可选 AI 任务助手，提供 Windows / Linux x64 原生包、独立 Mod、Docker amd64 镜像与源码工具包。真实模型、完整游戏任务、Linux 游戏和双客户端联机仍待验收。见 [更新说明](docs/RELEASE_NOTES_v0.30.md) 与 [本版验证说明](docs/RELEASE_VALIDATION_20261101.md)，历史单人验收保留在 [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md)。
+> **v0.35（程序版本 0.3.5，预览）**：新增可选 AI 任务助手，提供 Windows / Linux x64 原生包、独立 Mod、Docker amd64 镜像与源码工具包。真实模型、完整游戏任务、Linux 游戏和双客户端联机仍待验收。见 [更新说明](docs/RELEASE_NOTES_v0.35.md) 与 [本版验证说明](docs/RELEASE_VALIDATION_20261101.md)，历史单人验收保留在 [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md)。
 
-下载：[v0.30 GitHub Release](https://github.com/amy2022525-sketch/stardew-agent-bridge/releases/tag/v0.30)。每版提供校验和，按平台选取，不需要下载全部镜像。发行标签按项目命名为 `v0.30`，包名、Mod 清单和 API 使用规范版本号 `0.3.0`。
+下载：[v0.35 GitHub Release](https://github.com/amy2022525-sketch/stardew-agent-bridge/releases/tag/v0.35)。每版提供校验和，按平台选取，不需要下载全部镜像。发行标签按项目命名为 `v0.35`，包名、Mod 清单和 API 使用规范版本号 `0.3.5`。
 
 本版新增可选“AI 任务助手”：由 DSH、Codex 等主 Agent 派单，项目持续调用网页中配置的执行模型。此功能默认关闭，旧 `0.2.0-preview.1` 下载包不包含此功能。已通过自动化与部分隔离 Mock 浏览器检查，真实模型及游戏仍待验收。见 [使用说明](docs/DECISION_EXECUTOR.md) 与 [独立复核报告](DECISION_EXECUTOR_HANDOVER_REPORT.md)。
 
@@ -24,7 +24,7 @@
 
 English: [README.en.md](README.en.md)
 
-给 AI 的游玩技能：[stardew-player](skills/stardew-player/SKILL.md) 包含有来源的攻略、MCP 执行流程与必须维护的短期/长期游玩日志。[导入与使用](docs/AI_SKILL.md)；适用于 DSH、Codex、Claude Code 等主 Agent。当前 main 已提供，旧 v0.30 下载包不自动更新。
+给 AI 的游玩技能：[stardew-player](skills/stardew-player/SKILL.md) 包含有来源的攻略、MCP 执行流程与必须维护的短期/长期游玩日志。[导入与使用](docs/AI_SKILL.md)；适用于 DSH、Codex、Claude Code 等主 Agent。本版已包含完整技能目录。
 
 ## 1. 结构
 

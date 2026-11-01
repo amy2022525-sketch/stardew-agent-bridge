@@ -31,7 +31,7 @@ ARG SAB_SOURCE_COMMIT=unknown
 LABEL org.opencontainers.image.title="stardew-agent-bridge" \
       org.opencontainers.image.source="https://github.com/amy2022525-sketch/stardew-agent-bridge" \
       org.opencontainers.image.revision="${SAB_SOURCE_COMMIT}" \
-      org.opencontainers.image.version="0.3.0" \
+      org.opencontainers.image.version="0.3.5" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.description="Single-player Stardew MCP container preview"
 RUN apt-get update && apt-get install -y --no-install-recommends util-linux ca-certificates libstdc++6 \

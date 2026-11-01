@@ -1,8 +1,8 @@
 # Stardew Agent Bridge
 
-**v0.30 (application version 0.3.0, preview)** adds an optional AI task assistant and includes Windows/Linux x64 packages, a standalone SMAPI Mod, Docker amd64 images and the source/Compose toolkit. Download matching files and checksums from the [v0.30 release](https://github.com/amy2022525-sketch/stardew-agent-bridge/releases/tag/v0.30). The public tag is `v0.30`; package names, manifests and APIs use SemVer `0.3.0`.
+**v0.35 (application version 0.3.5, preview)** adds an optional AI task assistant and includes Windows/Linux x64 packages, a standalone SMAPI Mod, Docker amd64 images and the source/Compose toolkit. Download matching files and checksums from the [v0.35 release](https://github.com/amy2022525-sketch/stardew-agent-bridge/releases/tag/v0.35). The public tag is `v0.35`; package names, manifests and APIs use SemVer `0.3.5`.
 
-The task assistant lets DSH, Codex or another primary agent delegate tasks while the bridge calls an execution model configured in the web console. It is disabled by default; the older 0.2.0-preview.1 downloads do not contain it. Automated and partial isolated Mock browser checks have passed; real-model and gameplay acceptance remain pending. See the [release notes](docs/RELEASE_NOTES_v0.30.md), [user guide](docs/DECISION_EXECUTOR.md) and [verification report](DECISION_EXECUTOR_HANDOVER_REPORT.md).
+The task assistant lets DSH, Codex or another primary agent delegate tasks while the bridge calls an execution model configured in the web console. It is disabled by default; the older 0.2.0-preview.1 downloads do not contain it. Automated and partial isolated Mock browser checks have passed; real-model and gameplay acceptance remain pending. See the [release notes](docs/RELEASE_NOTES_v0.35.md), [user guide](docs/DECISION_EXECUTOR.md) and [verification report](DECISION_EXECUTOR_HANDOVER_REPORT.md).
 
 Docker game mode and MP1 are previews. Native Linux gameplay and two real multiplayer clients still require acceptance; automated/mock checks do not certify those. See [current validation](docs/RELEASE_VALIDATION_20261101.md), [Docker installation](docs/DOCKER_INSTALL.md), [Linux installation](docs/LINUX_INSTALL.md), and [MP1 setup](docs/MULTIPLAYER_INSTALL.md). Windows packages require Node >=22.13; Linux packages bundle Node. Images never include proprietary game files or saves.
 
@@ -16,7 +16,7 @@ Let any local MCP-capable agent (DSH, Codex CLI, Claude Code, …) observe and p
 
 English is a summary; the authoritative documents are Chinese (see [README.md](README.md)).
 
-The portable [stardew-player skill](skills/stardew-player/SKILL.md) combines sourced gameplay guidance, MCP operations and required short-term checkpoints plus long-term goals/lessons. See [setup and storage](docs/AI_SKILL.md). It is available on main for DSH, Codex, Claude Code and other agent hosts; existing v0.30 downloads are unchanged. The instructions are currently in Chinese.
+The portable [stardew-player skill](skills/stardew-player/SKILL.md) combines sourced gameplay guidance, MCP operations and required short-term checkpoints plus long-term goals/lessons. See [setup and storage](docs/AI_SKILL.md). It is included in v0.35 for DSH, Codex, Claude Code and other agent hosts. The instructions are currently in Chinese.
 
 ## Architecture
 
