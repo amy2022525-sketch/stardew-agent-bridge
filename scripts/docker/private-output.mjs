@@ -14,10 +14,17 @@ export function writePrivateOutput(output, content) {
     try {
         fd = openSync(temporary, 'wx', 0o600);
         if (process.platform === 'win32') {
-            const who = spawnSync('whoami.exe', ['/user', '/fo', 'csv', '/nh'], { encoding: 'utf8', shell: false });
+            // 必须用系统目录里的工具：Git for Windows 也提供 whoami.exe（coreutils 版），
+            // 按 PATH 解析会拿到不支持 /user 的那个，导致 ACL 永远失败。
+            const system32 = process.env.SystemRoot ? path.join(process.env.SystemRoot, 'System32') : 'C:////Windows////System32';
+            const systemTool = (name) => {
+                const candidate = path.join(system32, name);
+                return existsSync(candidate) ? candidate : name;
+            };
+            const who = spawnSync(systemTool('whoami.exe'), ['/user', '/fo', 'csv', '/nh'], { encoding: 'utf8', shell: false });
             const sid = who.stdout?.match(/S-1-[0-9-]+/)?.[0];
             if (!sid) throw new Error('PRIVATE_ACL_IDENTITY_FAILED');
-            const acl = spawnSync('icacls.exe', [temporary, '/inheritance:r', '/grant:r', `*${sid}:F`, '/grant:r', '*S-1-5-18:F'], { stdio: 'ignore', shell: false });
+            const acl = spawnSync(systemTool('icacls.exe'), [temporary, '/inheritance:r', '/grant:r', `*${sid}:F`, '/grant:r', '*S-1-5-18:F'], { stdio: 'ignore', shell: false });
             if (acl.status !== 0) throw new Error('PRIVATE_ACL_FAILED');
         }
         writeSync(fd, Buffer.from(content, 'utf8')); fsyncSync(fd); closeSync(fd); fd = undefined;

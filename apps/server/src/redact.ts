@@ -1,7 +1,10 @@
 import { redactPath, type DataPaths } from './paths.js';
 
-/** 诊断导出中需要整体替换的键：凭据类 + 联机身份/会话类（正常运行界面仍可展示非秘密身份）。 */
-const sensitiveKey = /token|secret|password|authorization|^saveId$|^worldId$|SessionId$|ConnectionId$|permissionLeaseId$|FarmerId$/i;
+/**
+ * 诊断导出中需要整体替换的键：凭据类 + 联机身份/会话类 + 执行模型私有载荷。
+ * 正常运行界面仍可展示非秘密身份（例如任务来源 clientId）。
+ */
+const sensitiveKey = /token|secret|password|authorization|^saveId$|^worldId$|SessionId$|ConnectionId$|permissionLeaseId$|FarmerId$|^apiKey$|^prompt$|^systemPrompt$|^contextJson$|^rawError$|^cookie$|^messages$/i;
 
 /** Redact nested diagnostic payloads before previewing or writing them. */
 export function redactDiagnostics(value: unknown, paths: DataPaths): unknown {

@@ -91,3 +91,14 @@
 - [ ] `scripts/desktop-entry.mjs install/remove` 生成与删除 `.desktop`，`desktop-file-validate` 通过
 - [ ] 两份安装文档描述的路径与实际行为一致（数据根、快照目录、日志位置）
 - [ ] Linux CI job 绿；Windows job 仍绿（R01–R04 无退化）
+
+## 可选执行器（AI 任务助手）发布前检查
+
+- [ ] `npm run build` / `npm test` / `npm run test:mod` 全部通过（含 `decision-*` 与 `WorldIdentityTests`）。
+- [ ] 全新数据根启动：默认关闭，`decision/` 下不出现密钥、任务库为空；打开网页不触发模型请求。
+- [ ] 两个 provider 协议各用 FakeProvider/本地假服务验证一次；真实服务只用测试预算。
+- [ ] 取消/F9/接管/断线/重启/未知回执按 `docs/DECISION_EXECUTOR_ACCEPTANCE.md` 留证。
+- [ ] 390px 浏览器检查与 XSS 测试数据（目标、记忆、错误）通过。
+- [ ] Windows/Linux/Docker 包中 `docs/DECISION_EXECUTOR*.md` 存在；包内无 `decision/secrets.json`、无真实任务库、无玩家日志。
+- [ ] `verify:package` 的工具数断言为 33 且与实际 `tools/list` 一致。
+- [ ] README/CHANGELOG 与真实验收程度一致：未实机验收就写“未验收”，不写“已发布可用”。

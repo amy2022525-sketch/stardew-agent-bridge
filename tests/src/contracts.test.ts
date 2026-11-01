@@ -17,12 +17,13 @@ const WRITE_TOOLS = TOOLS.filter((tool) => tool.kind === 'write');
 const READ_TOOLS = TOOLS.filter((tool) => tool.kind === 'read');
 
 describe('工具目录', () => {
-    it('包含 29 个工具且名称唯一、统一前缀', () => {
-        assert.equal(TOOLS.length, 29);
+    it('工具面已包含 29 个旧工具 + 4 个决策工具（33），且名称唯一、统一前缀', () => {
+        // 数量来自 registry 本身；任何新增工具都必须同时更新 MCP/stdio/Web 的发现结果。
+        assert.equal(TOOLS.length, 33);
         const names = new Set(TOOLS.map((tool) => tool.name));
         assert.equal(names.size, TOOLS.length);
         for (const tool of TOOLS) {
-            assert.match(tool.name, /^stardew_[a-z]+$/);
+            assert.match(tool.name, /^stardew_[a-z_]+$/);
             assert.ok(tool.description.length >= 8, `${tool.name} 描述过短`);
             assert.equal(typeof tool.inputSchema, 'object');
             assert.ok(tool.annotations, `${tool.name} 缺少 annotations`);

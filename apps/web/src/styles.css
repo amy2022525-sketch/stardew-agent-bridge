@@ -191,3 +191,29 @@ footer { text-align: center; color: var(--muted); font-size: 12px; padding: 18px
 }
 /* Docker 容器状态卡（原生部署整卡隐藏） */
 .docker-title { margin: 0 0 4px; font-weight: 600; overflow-wrap: anywhere; }
+
+/* AI 任务助手（决策执行器）：表单与任务块。沿用上面的卡片与配色变量。 */
+.decision-task-title { font-weight: 600; margin: 6px 0 8px; overflow-wrap: anywhere; }
+.decision-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; margin-top: 10px; }
+.decision-form label { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 13px; }
+.decision-form input, .decision-form select { width: 100%; min-width: 0; }
+.decision-form .decision-check { flex-direction: row; align-items: center; gap: 8px; }
+.decision-form .decision-check input { width: auto; }
+.decision-form .actions { grid-column: 1 / -1; }
+.decision-form .notice, .decision-form .hint { grid-column: 1 / -1; margin: 0; }
+#decision-settings { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
+#decision-settings summary { cursor: pointer; font-weight: 600; }
+#decision-card h3 { font-size: 13px; margin: 18px 0 4px; }
+#decision-card .link-button {
+    background: none; border: 0; padding: 0; color: var(--accent);
+    font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere;
+}
+#decision-card .link-button:hover { text-decoration: underline; }
+#decision-tasks li, #decision-memories li { padding: 6px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+#decision-events { max-height: 260px; overflow: auto; }
+@media (max-width: 600px) {
+    .decision-form { grid-template-columns: minmax(0, 1fr); }
+}
+
+.decision-inline { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; font-size: 13px; }
+.decision-inline input { width: 100%; }

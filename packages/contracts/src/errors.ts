@@ -181,6 +181,111 @@ export const ERROR_CODES = {
         effectKnown: true,
         nextAction: 'fix_environment'
     },
+    DECISION_DISABLED: {
+        message: '决策执行器功能尚未启用，请在 Web 配置中开启。',
+        effectKnown: true,
+        nextAction: 'fix_environment'
+    },
+    DECISION_NOT_AUTHORIZED: {
+        message: '当前客户端没有派单或任务管理权限，请在 Web 授权或使用正确的客户端凭据。',
+        effectKnown: true,
+        nextAction: 'fix_environment'
+    },
+    EXECUTOR_BUSY: {
+        message: '已存在未结束的自动任务，本版本不自动排队，请先查看并处理现有任务。',
+        effectKnown: true,
+        nextAction: 'wait'
+    },
+    PROVIDER_NOT_CONFIGURED: {
+        message: '执行模型缺少配置或凭据，请在 Web 中完成设置。',
+        effectKnown: true,
+        nextAction: 'fix_environment'
+    },
+    PROVIDER_AUTH_FAILED: {
+        message: '执行模型认证失败（401/403），已停止本轮，请修正凭据。',
+        effectKnown: true,
+        nextAction: 'fix_environment'
+    },
+    PROVIDER_UNSUPPORTED: {
+        message: '供应商协议或结构化输出模式不受支持，请调整配置；不会隐式更换供应商。',
+        effectKnown: true,
+        nextAction: 'none'
+    },
+    PROVIDER_RATE_LIMITED: {
+        message: '执行模型被限流（429），将有限退避或等待主模型处理。',
+        effectKnown: true,
+        nextAction: 'wait'
+    },
+    PROVIDER_TIMEOUT: {
+        message: '执行模型请求超时，token 用量可能未知并按保守预留记录。',
+        effectKnown: false,
+        nextAction: 'query_action'
+    },
+    DECISION_OUTPUT_INVALID: {
+        message: '决策包格式或参数非法，已在执行前拒绝；最多一次纠错重试。',
+        effectKnown: true,
+        nextAction: 'observe'
+    },
+    POLICY_DENIED: {
+        message: '工具、目标或参数不在任务政策允许范围内，未执行。',
+        effectKnown: true,
+        nextAction: 'none'
+    },
+    BUDGET_EXHAUSTED: {
+        message: '任务达到预算上限（次数、时间或用量），进度保留，等待处理。',
+        effectKnown: true,
+        nextAction: 'observe'
+    },
+    WORLD_IDENTITY_UNAVAILABLE: {
+        message: '当前存档缺少稳定世界身份，请更新 Mod 或显式采用临时作用域模式。',
+        effectKnown: true,
+        nextAction: 'fix_environment'
+    },
+    TASK_SCOPE_CHANGED: {
+        message: '当前存档、角色或世界与任务绑定不一致，需要重新绑定并复核，不能自动迁移。',
+        effectKnown: true,
+        nextAction: 'restart_control'
+    },
+    CONTEXT_EXPIRED: {
+        message: '派单上下文 token 已过期或随重启作废，请重新获取 stardew_context。',
+        effectKnown: true,
+        nextAction: 'observe'
+    },
+    TASK_REVISION_CONFLICT: {
+        message: '任务定义版本不一致，请重新读取当前定义后再修改。',
+        effectKnown: true,
+        nextAction: 'query_action'
+    },
+    TASK_IDEMPOTENCY_CONFLICT: {
+        message: 'requestId 被重用于不同内容：返回原请求结果，不产生新副作用。',
+        effectKnown: true,
+        nextAction: 'query_action'
+    },
+    PAUSE_NOT_CONFIRMED: {
+        message: '游戏未确认进入适合等待模型的暂停状态，不宣称时间停止。',
+        effectKnown: true,
+        nextAction: 'wait'
+    },
+    USER_STOP_LATCHED: {
+        message: '人工停止锁生效，任务不再派发新动作，需用户在 Web 重新允许。',
+        effectKnown: true,
+        nextAction: 'fix_environment'
+    },
+    TASK_STORAGE_UNAVAILABLE: {
+        message: '决策数据库不可写、损坏或来自未来版本：自动任务已停止，原文件保持不变。',
+        effectKnown: false,
+        nextAction: 'fix_environment'
+    },
+    TASK_STALLED: {
+        message: '同一目标连续失败且无可观察进展，任务已停止并汇报尝试与卡点。',
+        effectKnown: true,
+        nextAction: 'observe'
+    },
+    MULTIPLAYER_AUTOMATION_UNSUPPORTED: {
+        message: '本版执行器不运行联机自动化任务，请继续使用直接 MCP 模式。',
+        effectKnown: true,
+        nextAction: 'none'
+    },
     INTERNAL_ERROR: {
         message: '桥接内部异常，请查看本地日志。',
         effectKnown: false,

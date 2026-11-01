@@ -2,6 +2,8 @@
 
 **0.2.0-preview.1** includes Windows and Linux x64 packages, a standalone SMAPI Mod, and Docker amd64 images plus the source/Compose toolkit. Download the matching files and checksums from [GitHub Releases](https://github.com/amy2022525-sketch/stardew-agent-bridge/releases).
 
+The `main` branch adds an optional task assistant: DSH, Codex or another primary agent delegates tasks, while the bridge calls an execution model configured in the web console. It is disabled by default and is **not included in the published 0.2.0-preview.1 packages**. Automated and partial isolated Mock browser checks have passed; real-model and gameplay acceptance remain pending. See the [user guide](docs/DECISION_EXECUTOR.md) and [verification report](DECISION_EXECUTOR_HANDOVER_REPORT.md).
+
 Docker game mode and MP1 are previews. Native Linux gameplay and two real multiplayer clients still require acceptance; automated/mock checks do not certify those. See [current validation](docs/RELEASE_VALIDATION_20261029.md), [Docker installation](docs/DOCKER_INSTALL.md), [Linux installation](docs/LINUX_INSTALL.md), and [MP1 setup](docs/MULTIPLAYER_INSTALL.md). Windows packages require Node >=22.13; Linux packages bundle Node. Images never include proprietary game files or saves.
 
 Earlier single-player checks are recorded in [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md). Those historical checks do not certify the new Linux, Docker or multiplayer paths. Fishing/combat, the full transaction/day-transition matrix, and complete tasks through DSH/Codex/Claude Code remain incomplete. No stable release has been published.
@@ -21,7 +23,7 @@ Agent host (DSH / Codex / Claude Code)
    │  standard MCP (Streamable HTTP, or the bundled stdio adapter)
    ▼
 Bridge (127.0.0.1:17655)  ← the single business core
-   ├── MCP surface: 29 `stardew_*` tools
+   ├── MCP surface: 33 `stardew_*` tools, including 4 optional decision tools on main
    ├── Web console: status, timeline, host-config wizard, human takeover
    ├── Action ledger (SQLite): actionId dedup, terminal replay, unresolved actions
    └── Control: control session + lease + single writer
@@ -49,7 +51,7 @@ node scripts/smoke.mjs   # real MCP round-trip: tools/list + status + snapshot
 node apps/server/dist/cli.js hosts --host codex --transport stdio   # host config snippet
 ```
 
-In the Web console, select **MCP 连接** (MCP connection), choose DSH, Codex, Claude Code or a generic MCP client, and generate a configuration. Copy or download it, then import it into your agent. Each agent should use a distinct connection name. The panel can test HTTP and stdio by performing a real MCP handshake, discovering 29 tools and calling the read-only `stardew_status` tool. This local check is separate from agent activity: ask your agent to call a tool to see its actual call record in the panel.
+In the Web console, select **MCP 连接** (MCP connection), choose DSH, Codex, Claude Code or a generic MCP client, and generate a configuration. Copy or download it, then import it into your agent. Each agent should use a distinct connection name. The panel can test HTTP and stdio by performing a real MCP handshake, discovering 33 tools and calling the read-only `stardew_status` tool. This local check is separate from agent activity: ask your agent to call a tool to see its actual call record in the panel.
 
 ### Linux source preview (initial no-game verification completed)
 
@@ -78,6 +80,7 @@ Per-host instructions: [docs/CLIENTS.md](docs/CLIENTS.md). Protocol and error mo
 | Consumption actions never double-spend | `actionId` dedup, terminal replay, `unknown` when the result is uncertain (query/observe, never replay) |
 | The game can protect itself | 5 s bridge-link loss ⇒ stop action, drop control, try to pause normally; `F9` = emergency stop |
 | The human is never fought | Every step *tries* to pause normally; player-opened menus are never closed, events are never skipped |
+| Optional in-process executor is off by default | When enabled, the bridge calls the executor model you configure; it may only use policy-allowed game tools. Control, dispatch, config, save, multiplayer, file and shell tools are never exposed, and a human stop (F9, Web takeover) always invalidates late model output. |
 
 ## Verification status
 
@@ -93,6 +96,7 @@ Per-host instructions: [docs/CLIENTS.md](docs/CLIENTS.md). Protocol and error mo
 | Real-game movement, container transfers and duplicate replay, crafting, placement | **passing for the tested cases**; see [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md) |
 | Bridge crash while waiting / Web console | Self-release observed / 9 browser checks passed |
 | Fishing, combat, remaining transactions, day transition, three real agent hosts | **pending** |
+| Optional AI task assistant (dual-model executor) | **built and unit-tested**: `typecheck`, `build`, `npm test` and `test:mod` pass; no real model call, no in-game or browser acceptance yet; see `docs/DECISION_EXECUTOR_ACCEPTANCE.md` |
 
 ## License
 

@@ -1,5 +1,6 @@
 /**
- * 28 个 Agent 工具的单一事实来源：MCP 工具定义、Web 表单约束、文档示例共用。
+ * Agent 工具的单一事实来源：MCP 工具定义、Web 表单约束、文档示例共用。
+ * 工具数量由 TOOLS 数组导出（TOOL_INDEX/TOOL_NAMES），注释与代码不写死数量。
  *
  * 重要：工具名带 `stardew_` 前缀，避免与宿主自带工具冲突。
  * `modArgs` 负责把工具表面参数映射成 Mod 内部命令参数，保证模型只需看这里的文档。
@@ -13,6 +14,7 @@ import {
     WAIT_MAX_MS
 } from './protocol.js';
 import type { ToolKind } from './protocol.js';
+import { DECISION_ID_PATTERN } from './decision.js';
 
 export type JsonSchema = Record<string, unknown>;
 
@@ -479,6 +481,104 @@ export const TOOLS: readonly ToolSpec[] = [
         ),
         annotations: annotations('停止当前动作', false),
         modArgs: (args) => (typeof args.actionId === 'string' ? { actionId: args.actionId } : {})
+    },
+    {
+        name: 'stardew_task',
+        title: '自动任务派单与控制',
+        description:
+            '向 Bridge 内置决策执行器派单或控制持久任务。submit 创建后台自动任务（先用 stardew_context 获取 contextToken），update/pause/resume/cancel/reply/resolve 管理既有任务；requestId 是幂等键。accepted 不等于完成；本版本只运行单人自动任务。执行器受 Web 政策、任务限制与预算约束，用户可随时经 Web 停止。',
+        command: 'bridge:decision_task',
+        kind: 'mixed',
+        inputSchema: readSchema(
+            {
+                operation: { type: 'string', enum: ['submit', 'update', 'pause', 'resume', 'cancel', 'reply', 'resolve'] },
+                requestId: { type: 'string', pattern: DECISION_ID_PATTERN, description: '调用者作用域内幂等键；同键同内容返回原结果。' },
+                taskId: { type: 'string', pattern: DECISION_ID_PATTERN, description: '目标任务 ID（除 submit 外必填）。' },
+                contextToken: { type: 'string', description: 'stardew_context 签发的短期 token（submit/resume/reply 必填）。' },
+                expectedRevision: { type: 'integer', minimum: 1, description: '任务定义版本（update/resume/reply/resolve 必填）。' },
+                title: { type: 'string', minLength: 1, maxLength: 120 },
+                goal: { type: 'string', minLength: 1, maxLength: 4096 },
+                providerId: { type: 'string', pattern: DECISION_ID_PATTERN },
+                policyId: { type: 'string', pattern: DECISION_ID_PATTERN },
+                scopeMode: { type: 'string', enum: ['persistent', 'ephemeral'] },
+                profileId: { type: 'string', pattern: DECISION_ID_PATTERN },
+                constraints: { type: 'object', description: '只能收紧 Web 已授权政策；字段见任务契约。' },
+                budget: { type: 'object', description: '次数/动作/时长/用量上限。' },
+                successCriteria: { type: 'array', maxItems: 16 },
+                patch: { type: 'object', description: 'update 的字段白名单：title/goal/constraints/budget/successCriteria。' },
+                reason: { type: 'string', maxLength: 240, description: 'pause/cancel 的原因摘要（可选，玩家可读）。' },
+                answer: { type: 'string', maxLength: 4096, description: 'reply 的答复文字；不改变全局权限。' },
+                resolution: { type: 'string', enum: ['accept_completion', 'reviewed_pause', 'reject_completion'], description: 'resolve 的复核结论。' },
+                note: { type: 'string', maxLength: 4096, description: 'resolve 的复核说明。' },
+                evidenceIds: { type: 'array', items: { type: 'string' }, maxItems: 16, description: 'resolve 引用的既有证据 ID。' }
+            },
+            ['operation', 'requestId']
+        ),
+        annotations: annotations('自动任务派单与控制', false, true)
+    },
+    {
+        name: 'stardew_task_status',
+        title: '查询任务状态',
+        description:
+            '只读查询自动任务：get 返回单个任务，list 分页列出（默认本人），wait 长轮询等待状态变化。不延长控制租约；wait 的请求断开或超时只结束这次等待，不取消后台任务。',
+        command: 'bridge:decision_task_status',
+        kind: 'read',
+        inputSchema: readSchema(
+            {
+                operation: { type: 'string', enum: ['get', 'list', 'wait'] },
+                taskId: { type: 'string', pattern: DECISION_ID_PATTERN },
+                cursor: { type: 'string', maxLength: 200, description: '分页游标（不透明，不泄露 SQL 或路径）。' },
+                limit: { type: 'integer', minimum: 1, maximum: 50 },
+                state: { type: 'string', enum: ['queued', 'running', 'pausing', 'paused', 'waiting_main', 'needs_review', 'completed', 'failed', 'cancelled'] },
+                afterStateVersion: { type: 'integer', minimum: 0, description: 'wait：从该 stateVersion 之后等待变化。' },
+                timeoutMs: { type: 'integer', minimum: 0, maximum: 15000 }
+            },
+            ['operation']
+        ),
+        annotations: annotations('查询任务状态', true)
+    },
+    {
+        name: 'stardew_context',
+        title: '读取派单上下文',
+        description:
+            '读取当前世界稳定身份、执行器开关、用户停止锁、可用 provider/policy 概况，并签发 60 秒短期 contextToken 供 stardew_task 绑定作用域。游戏离线时仍返回概况但 contextToken=null，不能派发游戏任务。只读，不取得也不释放控制权。',
+        command: 'bridge:decision_context',
+        kind: 'read',
+        inputSchema: readSchema(
+            {
+                operation: { type: 'string', enum: ['current'] },
+                profileId: { type: 'string', pattern: DECISION_ID_PATTERN, description: '可选；必须已存在且当前客户端可用。' }
+            },
+            ['operation']
+        ),
+        annotations: annotations('读取派单上下文', true)
+    },
+    {
+        name: 'stardew_memory',
+        title: '任务记忆管理',
+        description:
+            '按作用域搜索、读取、追加、更新或归档决策记忆。add/update 必须声明来源（主模型输入标 main_model，不得伪标 native_game）并携带 expectedRevision；记忆文本不能覆盖政策与授权，过期条目默认不作为当前事实；archive 只隐藏记录，不删除动作事实账本。',
+        command: 'bridge:decision_memory',
+        kind: 'mixed',
+        inputSchema: readSchema(
+            {
+                operation: { type: 'string', enum: ['search', 'get', 'add', 'update', 'archive'] },
+                memoryId: { type: 'string', pattern: DECISION_ID_PATTERN },
+                taskId: { type: 'string', pattern: DECISION_ID_PATTERN, description: '历史作用域查询：限本人或已共享任务。' },
+                query: { type: 'string', minLength: 1, maxLength: 500, description: 'search 关键词；使用参数化查询。' },
+                kind: { type: 'string', enum: ['task_working', 'episodic', 'preference', 'strategy', 'observed_fact'] },
+                title: { type: 'string', minLength: 1, maxLength: 120 },
+                content: { type: 'string', minLength: 1, maxLength: 2000 },
+                sourceType: { type: 'string', enum: ['main_model', 'user'] },
+                evidenceIds: { type: 'array', items: { type: 'string' }, maxItems: 16 },
+                /** ISO 时间或 null：null 表示清除过期时间（仅 update 有意义）。 */
+                expiresAt: { type: ['string', 'null'], maxLength: 40 },
+                expectedRevision: { type: 'integer', minimum: 1 },
+                limit: { type: 'integer', minimum: 1, maximum: 12 }
+            },
+            ['operation']
+        ),
+        annotations: annotations('任务记忆管理', false)
     }
 ];
 

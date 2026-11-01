@@ -301,7 +301,7 @@ export function main(argv) {
         const source = path.join(REPO, name);
         if (existsSync(source)) copyFileSync(source, path.join(outDir, name));
     }
-    for (const name of ['LINUX_INSTALL.md', 'LINUX_DEVELOPMENT.md', 'LINUX_ACCEPTANCE.md', 'PLATFORM_MATRIX.md', 'PROTOCOL.md', 'CLIENTS.md', 'AGENT_GUIDE.md', 'ACCEPTANCE.md', 'TROUBLESHOOTING.md', 'MULTIPLAYER_INSTALL.md', 'MULTIPLAYER_ACCEPTANCE.md', 'DOCKER_INSTALL.md', 'RELEASE_VALIDATION_20261029.md']) {
+    for (const name of ['LINUX_INSTALL.md', 'LINUX_DEVELOPMENT.md', 'LINUX_ACCEPTANCE.md', 'PLATFORM_MATRIX.md', 'PROTOCOL.md', 'CLIENTS.md', 'AGENT_GUIDE.md', 'ACCEPTANCE.md', 'TROUBLESHOOTING.md', 'MULTIPLAYER_INSTALL.md', 'MULTIPLAYER_ACCEPTANCE.md', 'DOCKER_INSTALL.md', 'RELEASE_VALIDATION_20261029.md', 'DECISION_EXECUTOR.md', 'DECISION_EXECUTOR_ACCEPTANCE.md']) {
         const source = path.join(REPO, 'docs', name);
         if (existsSync(source)) copyFileSync(source, path.join(outDir, 'docs', name));
     }

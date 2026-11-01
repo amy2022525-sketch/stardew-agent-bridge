@@ -176,6 +176,15 @@ stdio（宿主只支持子进程；令牌从数据根读取，不写进配置）
 | Claude Code | stdio / HTTP | 模板已交付，待验证 | 配置片段见 §3 |
 | 其他 MCP 客户端 | HTTP | 通用模板可用，待验证 | 需要支持 Bearer 头或可用 stdio |
 
-Linux 上的宿主接入与 Windows 完全同构（本版 29 个工具，新增只读 stardew_multiplayer），差异只是包内路径与数据根：
+Linux 上的宿主接入与 Windows 完全同构（本版 33 个工具：原 29 个 + 4 个可选决策工具），差异只是包内路径与数据根：
 见 [LINUX_INSTALL.md](LINUX_INSTALL.md) 与 [PLATFORM_MATRIX.md](PLATFORM_MATRIX.md)。
 本表"待验证"的行必须由原协作者在真实宿主上执行 §7 的短任务后才能改为通过。
+
+## 决策工具（可选）
+
+`stardew_context`、`stardew_task`、`stardew_task_status`、`stardew_memory` 与其他工具一起通过 HTTP MCP、legacy MCP 与 stdio 暴露，数量为 33。它们属于 Bridge 业务，不会转发给 Mod。
+
+- 默认关闭：未启用时 `stardew_task` 返回 `DECISION_DISABLED`，其他旧工具不受影响。
+- 身份：`ownerClientId` 由认证层决定，请求正文不能自填；内部保留前缀 `sab-internal-decision:` 不能用于客户端注册。
+- 权限：只有配置里 `authorizedClientIds` 列出的客户端可以派单；读取他人任务需要 Web 明确打开共享只读。
+- 断开语义：`wait` 超时或连接断开只结束这次等待，不取消持久任务。

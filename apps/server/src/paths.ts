@@ -37,6 +37,11 @@ export interface DataPaths {
     lock: string;
     /** 新增：本应用图标等静态资源落地目录。 */
     icons: string;
+    /** 新增：可选双模型执行器的独立子目录（配置/凭据/状态库与旧 Bridge 文件隔离）。 */
+    decisionRoot: string;
+    decisionConfig: string;
+    decisionSecrets: string;
+    decisionDb: string;
 }
 
 /** 完整描述（含来源），供 doctor/launch 报告使用。 */
@@ -72,6 +77,7 @@ function resolveWebDist(sourceRoot: string, explicit?: string): string {
 }
 
 export function dataPaths(root: string, webDist?: string): DataPaths {
+    const decisionRoot = path.join(root, 'decision');
     return {
         root,
         config: path.join(root, 'config.json'),
@@ -83,7 +89,11 @@ export function dataPaths(root: string, webDist?: string): DataPaths {
         screenshots: path.join(root, 'screenshots'),
         webDist: resolveWebDist(sourceRoot(), webDist),
         lock: path.join(root, 'bridge.lock'),
-        icons: path.join(root, 'icons')
+        icons: path.join(root, 'icons'),
+        decisionRoot,
+        decisionConfig: path.join(decisionRoot, 'config.json'),
+        decisionSecrets: path.join(decisionRoot, 'secrets.json'),
+        decisionDb: path.join(decisionRoot, 'decision.sqlite')
     };
 }
 
@@ -118,6 +128,8 @@ export function ensureDirs(paths: DataPaths): void {
     for (const dir of [paths.logs, paths.exports, paths.screenshots, paths.icons]) {
         if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: PRIVATE_DIR_MODE });
     }
+    // 决策执行器的独立子目录同样按私密目录 0700 创建；只处理本应用自己的目录。
+    ensurePrivateDir(paths.decisionRoot);
 }
 
 /** 旧 Linux 数据根诊断（只读，不合并、不删除）。 */

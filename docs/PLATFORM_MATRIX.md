@@ -9,7 +9,7 @@
 | 常驻 Bridge（本地 HTTP MCP） | 支持 | WSL2 无游戏验证通过 | 只监听 `127.0.0.1` |
 | stdio 适配器 | 支持 | WSL2 真实协议往返通过 | 与 HTTP 共享同一业务核心 |
 | Web 控制台 | 支持 | API 检查通过；图形交互待验 | 无框架静态页；可配对/复制配置 |
-| 29 个 `stardew_*` 工具 | 支持 | 工具发现/模拟契约通过；实际玩法待验 | 新增只读 stardew_multiplayer |
+| 33 个 `stardew_*` 工具 | 支持 | 工具发现/单测通过；实际玩法待验 | 原 29 个 + 4 个可选决策工具 |
 | Mod（SMAPI） | 支持 | 已实现；原生游戏加载待验 | `net6.0`，同一份源码 |
 | 数据根解析 | `%LOCALAPPDATA%` | XDG | 见 [LINUX_DEVELOPMENT.md](LINUX_DEVELOPMENT.md) §2 |
 | 单实例锁 | 支持 | WSL2 八进程竞争检查通过 | Linux 用 `/proc` 校验启动身份，防 PID 复用 |
@@ -71,3 +71,16 @@
 ## 6. Docker 预览
 
 发布 `linux/amd64` 的 bridge-runtime、game-runtime、mod-build 三个离线镜像及源码/Compose 工具包。Bridge 模式的真实容器、HTTP/stdio MCP 可以独立验证；game-runtime 带 X11/noVNC 图形栈，运行游戏前必须自行提供合法 Linux 游戏与 SMAPI。mod-build 是编译工具，不是游戏服务。容器版当前仅支持单人；MP1 只在原生客户端路径实验。Windows 可经 WSL2/Linux Docker 使用，Windows 容器、ARM64、macOS 游戏与 Steam 登录自动化不在范围。各项实际结果见当前验证报告，安装见 [DOCKER_INSTALL.md](DOCKER_INSTALL.md)。
+
+## 7. 可选执行器（AI 任务助手）
+
+| 能力 | Windows | Linux | Docker |
+| --- | --- | --- | --- |
+| 任务库/配置/密钥路径 | `%LOCALAPPDATA%\StardewAgentBridge\decision\` | `$XDG_DATA_HOME/StardewAgentBridge/decision/` | 随数据卷 `/data/decision/` |
+| 私密权限 | 当前用户数据根（不宣称等同加密保险箱） | 目录 0700、文件 0600 | 随卷权限；镜像层不含密钥 |
+| provider 网络 | 允许回环/私网需显式开启 | 同左 | 容器内 `127.0.0.1` 是容器自己；连宿主模型需实际可达地址 |
+| 只读 secret-file | 可选 | 可选 | `/run/secrets/<name>` 白名单 |
+| 单人自动任务 | 支持（未实机验收） | 支持（未实机验收） | 支持（未实机验收） |
+| 联机自动任务 | 明确拒绝 | 明确拒绝 | 明确拒绝 |
+
+本表描述代码行为，不代表已完成真实平台验收；见 `docs/DECISION_EXECUTOR_ACCEPTANCE.md`。

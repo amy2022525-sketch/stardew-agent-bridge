@@ -5,6 +5,24 @@
 import { Ajv, type ValidateFunction } from 'ajv';
 import type { JsonSchema, ToolSpec } from './tools.js';
 import { getTool } from './tools.js';
+import {
+    DECISION_ID_MAX_LENGTH,
+    isDecisionId,
+    MEMORY_CONTENT_MAX_CHARS,
+    MEMORY_KINDS,
+    MEMORY_QUERY_MAX_CHARS,
+    MEMORY_TITLE_MAX_CHARS,
+    SUCCESS_CRITERION_KINDS,
+    TASK_GOAL_MAX_CHARS,
+    TASK_LIST_MAX_LIMIT,
+    TASK_MAX_CONSTRAINT_LOCATIONS,
+    TASK_MAX_CRITERIA,
+    TASK_MAX_TILES_PER_CRITERION,
+    TASK_REQUEST_MAX_BYTES,
+    TASK_TITLE_MAX_CHARS,
+    TASK_WAIT_TIMEOUT_MAX_MS,
+    utf8ByteLength
+} from './decision.js';
 
 // 静态导入让发布打包器把 Ajv 一起收进单文件，安装后无需开发目录的 node_modules。
 const ajv = new Ajv({ allErrors: true, strict: false, coerceTypes: false, allowUnionTypes: true });
@@ -99,6 +117,184 @@ export function checkBusinessRules(tool: ToolSpec, args: Record<string, unknown>
         if (operation === 'checkpoint') {
             const any = ['goal', 'progress', 'next', 'constraints'].some((key) => typeof args[key] === 'string');
             if (!any) add('goal', 'checkpoint 至少需要 goal/progress/next/constraints 之一');
+        }
+    }
+
+    // ---------------- 决策执行器新工具（bridge:decision_*） ----------------
+    const needString = (key: string, label: string) => {
+        if (typeof args[key] !== 'string' || (args[key] as string).trim().length === 0) add(key, label + ' 需要非空 ' + key);
+    };
+    const needRevision = (label: string) => {
+        if (typeof args.expectedRevision !== 'number' || !Number.isInteger(args.expectedRevision) || args.expectedRevision < 1) {
+            add('expectedRevision', label + ' 需要正整数 expectedRevision');
+        }
+    };
+
+    if (tool.command === 'bridge:decision_task') {
+        const operation = typeof args.operation === 'string' ? args.operation : '';
+        if (!isDecisionId(args.requestId)) add('requestId', 'requestId 必须是 1–' + DECISION_ID_MAX_LENGTH + ' 个字符的安全 ASCII ID');
+        for (const key of ['taskId', 'providerId', 'policyId', 'profileId']) {
+            if (args[key] !== undefined && !isDecisionId(args[key])) add(key, key + ' 必须是 1–' + DECISION_ID_MAX_LENGTH + ' 个字符的安全 ASCII ID');
+        }
+        if (operation === 'submit') {
+            needString('contextToken', 'submit');
+            needString('title', 'submit');
+            needString('goal', 'submit');
+            if (typeof args.title === 'string' && args.title.length > TASK_TITLE_MAX_CHARS) add('title', 'title 最多 ' + TASK_TITLE_MAX_CHARS + ' 字符');
+            if (typeof args.goal === 'string') {
+                if (args.goal.length > TASK_GOAL_MAX_CHARS) add('goal', 'goal 最多 ' + TASK_GOAL_MAX_CHARS + ' 字符');
+                if (args.goal.trim().length === 0) add('goal', 'goal 不能为空');
+            }
+            if (utf8ByteLength(JSON.stringify(args)) > TASK_REQUEST_MAX_BYTES) add('(root)', '请求整体超过 ' + TASK_REQUEST_MAX_BYTES + ' 字节上限');
+            const constraints = (args.constraints ?? undefined) as Record<string, unknown> | undefined;
+            if (constraints !== undefined) {
+                if (Array.isArray(constraints.locations)) {
+                    if (constraints.locations.length > TASK_MAX_CONSTRAINT_LOCATIONS) add('constraints.locations', 'locations 最多 ' + TASK_MAX_CONSTRAINT_LOCATIONS + ' 项');
+                    for (const loc of constraints.locations) {
+                        if (typeof loc !== 'string' || loc.length === 0 || loc.length > 64) add('constraints.locations', '地点必须是 64 字符以内的非空字符串');
+                    }
+                }
+                for (const key of ['stopEnergyAtOrBelow', 'stopHealthAtOrBelow', 'latestStartGameTime', 'maxGoldSpend']) {
+                    const v = constraints[key];
+                    if (v !== undefined && v !== null) {
+                        if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) add('constraints.' + key, key + ' 必须是非负有限数');
+                    }
+                }
+                if (typeof constraints.latestStartGameTime === 'number' && constraints.latestStartGameTime > 2600) add('constraints.latestStartGameTime', 'latestStartGameTime 超出游戏时间范围');
+                if (constraints.allowDayChange === true) add('constraints.allowDayChange', '本版本禁止跨日续跑，allowDayChange 仅支持 false');
+            }
+            const budget = (args.budget ?? undefined) as Record<string, unknown> | undefined;
+            if (budget !== undefined) {
+                for (const key of ['maxModelCalls', 'maxWriteActions', 'maxActiveMs', 'maxAccountedTokens']) {
+                    const v = budget[key];
+                    if (v !== undefined && (typeof v !== 'number' || !Number.isInteger(v) || v <= 0)) add('budget.' + key, key + ' 必须是正整数');
+                }
+            }
+            if (args.successCriteria !== undefined) {
+                if (!Array.isArray(args.successCriteria)) {
+                    add('successCriteria', 'successCriteria 必须是数组');
+                } else {
+                    if (args.successCriteria.length > TASK_MAX_CRITERIA) add('successCriteria', '成功条件最多 ' + TASK_MAX_CRITERIA + ' 条');
+                    args.successCriteria.forEach((item, index) => {
+                        const criterion = item as Record<string, unknown>;
+                        const kind = criterion ? criterion.kind : undefined;
+                        if (typeof kind !== 'string' || !(SUCCESS_CRITERION_KINDS as readonly string[]).includes(kind)) {
+                            add('successCriteria.' + index, '未知成功条件 kind');
+                            return;
+                        }
+                        if (kind === 'crop_tiles_watered') {
+                            const tiles = criterion.tiles;
+                            if (!Array.isArray(tiles) || tiles.length === 0) add('successCriteria.' + index, 'crop_tiles_watered 需要非空 tiles');
+                            else if (tiles.length > TASK_MAX_TILES_PER_CRITERION) add('successCriteria.' + index, '每条成功条件最多 ' + TASK_MAX_TILES_PER_CRITERION + ' 格');
+                            else {
+                                for (const tile of tiles) {
+                                    const t = tile as Record<string, unknown>;
+                                    if (!t || typeof t.x !== 'number' || typeof t.y !== 'number' || !Number.isInteger(t.x) || !Number.isInteger(t.y) || t.x < 0 || t.y < 0) {
+                                        add('successCriteria.' + index, '地块坐标必须是非负整数');
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if (kind === 'at_tile') {
+                            const tolerance = criterion.tolerance;
+                            if (tolerance !== undefined && (typeof tolerance !== 'number' || !Number.isFinite(tolerance) || tolerance < 0 || tolerance > 1)) {
+                                add('successCriteria.' + index, 'tolerance 必须在 0–1');
+                            }
+                            if (typeof criterion.x !== 'number' || typeof criterion.y !== 'number' || criterion.x < 0 || criterion.y < 0) {
+                                add('successCriteria.' + index, 'at_tile 需要非负整数坐标');
+                            }
+                        }
+                        if (kind === 'inventory_at_least') {
+                            if (typeof criterion.count !== 'number' || !Number.isInteger(criterion.count) || criterion.count <= 0) {
+                                add('successCriteria.' + index, 'inventory_at_least 需要正整数 count');
+                            }
+                            if (typeof criterion.itemId !== 'string' || criterion.itemId.length === 0) add('successCriteria.' + index, 'inventory_at_least 需要 itemId');
+                        }
+                    });
+                }
+            }
+        }
+        if (operation === 'update') {
+            needString('taskId', 'update');
+            needRevision('update');
+            if (args.patch === undefined || typeof args.patch !== 'object' || Array.isArray(args.patch)) {
+                add('patch', 'update 需要 patch 对象');
+            } else {
+                const allowedPatch = ['title', 'goal', 'constraints', 'budget', 'successCriteria'];
+                for (const key of Object.keys(args.patch as Record<string, unknown>)) {
+                    if (!allowedPatch.includes(key)) add('patch.' + key, 'patch 字段不在白名单（' + allowedPatch.join('/') + '）');
+                }
+            }
+        }
+        if (operation === 'pause' || operation === 'cancel') needString('taskId', operation);
+        if (operation === 'resume' || operation === 'reply') {
+            needString('taskId', operation);
+            needString('contextToken', operation);
+            needRevision(operation);
+            if (operation === 'reply') {
+                needString('answer', 'reply');
+                if (typeof args.answer === 'string' && args.answer.length > TASK_GOAL_MAX_CHARS) add('answer', 'answer 过长');
+            }
+        }
+        if (operation === 'resolve') {
+            needString('taskId', 'resolve');
+            needRevision('resolve');
+            if (args.resolution !== 'accept_completion' && args.resolution !== 'reviewed_pause' && args.resolution !== 'reject_completion') {
+                add('resolution', 'resolution 限定 accept_completion/reviewed_pause/reject_completion');
+            }
+            needString('note', 'resolve');
+        }
+    }
+
+    if (tool.command === 'bridge:decision_task_status') {
+        const operation = typeof args.operation === 'string' ? args.operation : '';
+        if (operation !== 'list') needString('taskId', operation);
+        if (args.taskId !== undefined && !isDecisionId(args.taskId)) add('taskId', 'taskId 必须是 1–' + DECISION_ID_MAX_LENGTH + ' 个字符的安全 ASCII ID');
+        if (operation === 'list' && args.limit !== undefined) {
+            if (typeof args.limit !== 'number' || !Number.isInteger(args.limit) || args.limit < 1 || args.limit > TASK_LIST_MAX_LIMIT) {
+                add('limit', 'limit 必须在 1–' + TASK_LIST_MAX_LIMIT);
+            }
+        }
+        if (operation === 'wait') {
+            if (typeof args.afterStateVersion !== 'number' || !Number.isInteger(args.afterStateVersion) || args.afterStateVersion < 0) {
+                add('afterStateVersion', 'wait 需要非负整数 afterStateVersion');
+            }
+            if (args.timeoutMs !== undefined && (typeof args.timeoutMs !== 'number' || !Number.isInteger(args.timeoutMs) || args.timeoutMs < 0 || args.timeoutMs > TASK_WAIT_TIMEOUT_MAX_MS)) {
+                add('timeoutMs', 'timeoutMs 必须在 0–' + TASK_WAIT_TIMEOUT_MAX_MS);
+            }
+        }
+    }
+
+    if (tool.command === 'bridge:decision_context') {
+        if (args.operation !== 'current') add('operation', 'operation 仅支持 current');
+        if (args.profileId !== undefined && !isDecisionId(args.profileId)) add('profileId', 'profileId 必须是 1–' + DECISION_ID_MAX_LENGTH + ' 个字符的安全 ASCII ID');
+    }
+
+    if (tool.command === 'bridge:decision_memory') {
+        const operation = typeof args.operation === 'string' ? args.operation : '';
+        if (operation === 'search') {
+            if (typeof args.query !== 'string' || args.query.length === 0) add('query', 'search 需要 query');
+            else if (args.query.length > MEMORY_QUERY_MAX_CHARS) add('query', 'query 最多 ' + MEMORY_QUERY_MAX_CHARS + ' 字符');
+        }
+        if (operation === 'get' || operation === 'archive') {
+            needString('memoryId', operation);
+            if (args.memoryId !== undefined && !isDecisionId(args.memoryId)) add('memoryId', 'memoryId 必须是安全 ASCII ID');
+        }
+        if (operation === 'add') {
+            needString('title', 'add');
+            needString('content', 'add');
+            if (typeof args.title === 'string' && args.title.length > MEMORY_TITLE_MAX_CHARS) add('title', 'title 最多 ' + MEMORY_TITLE_MAX_CHARS + ' 字符');
+            if (typeof args.content === 'string' && args.content.length > MEMORY_CONTENT_MAX_CHARS) add('content', 'content 最多 ' + MEMORY_CONTENT_MAX_CHARS + ' 字符');
+            if (typeof args.kind !== 'string' || !(MEMORY_KINDS as readonly string[]).includes(args.kind)) add('kind', 'add 需要已知记忆 kind');
+            if (args.sourceType !== 'main_model' && args.sourceType !== 'user') add('sourceType', 'add 必须声明来源（main_model/user）；不得伪标 native_game');
+        }
+        if (operation === 'update') {
+            needString('memoryId', 'update');
+            needRevision('update');
+        }
+        if (typeof args.expiresAt === 'string' && Number.isNaN(Date.parse(args.expiresAt))) {
+            add('expiresAt', 'expiresAt 必须是可解析的 ISO 时间或 null');
         }
     }
 

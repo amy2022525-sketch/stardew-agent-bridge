@@ -5,6 +5,7 @@
  */
 import type { ActionReceipt, BridgeStatus, ControlSessionInfo } from '@sab/contracts';
 import { setupMcpPanel } from './mcp-panel.js';
+import { setupDecisionPanel } from './decision-panel.js';
 import { desktopLinkUrl, dockerStatusHint, fetchDockerStatus, type DockerStatusView } from './docker-status.mjs';
 
 interface TimelineEvent {
@@ -40,6 +41,7 @@ let csrfToken = '';
 let currentStatus: BridgeStatus | null = null;
 let actionNotice: string | null = null;
 let mcpPanel: ReturnType<typeof setupMcpPanel> | null = null;
+let decisionPanel: ReturnType<typeof setupDecisionPanel> | null = null;
 function showNotice(text: string): void {
     actionNotice = text;
     els.statusNotice.textContent = text;
@@ -212,6 +214,7 @@ async function refreshStatus(): Promise<void> {
         currentStatus = await api<BridgeStatus>('/api/v1/status');
         renderStatus();
         await mcpPanel?.refresh();
+        await decisionPanel?.refresh();
     } catch (error) {
         els.statusNotice.textContent = `读取状态失败：${error instanceof Error ? error.message : String(error)}`;
     }
@@ -329,13 +332,19 @@ async function boot(): Promise<void> {
     }
     wire();
     mcpPanel = setupMcpPanel(api);
+    decisionPanel = setupDecisionPanel(api);
     await refreshStatus();
     await loadReceipts();
     const source = new EventSource('/api/v1/events');
+    // 重连后不做增量假设：进程内 seq 可能已经重置，直接全量刷新真实状态。
+    source.onopen = () => { void refreshStatus(); };
     source.onmessage = (message) => {
         try {
-            addTimelineEvent(JSON.parse(message.data) as TimelineEvent);
-            if ((JSON.parse(message.data) as TimelineEvent).kind.startsWith('action_')) void refreshStatus();
+            const event = JSON.parse(message.data) as TimelineEvent;
+            addTimelineEvent(event);
+            // 决策事件更新任务面板；action_ 事件刷新控制权与账本状态。
+            if (event.kind.startsWith('decision_')) void decisionPanel?.refresh();
+            if (event.kind.startsWith('action_')) void refreshStatus();
         } catch {
             /* 忽略格式错误 */
         }

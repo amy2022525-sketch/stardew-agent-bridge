@@ -4,6 +4,8 @@
 
 下载：[GitHub Releases](https://github.com/amy2022525-sketch/stardew-agent-bridge/releases)。每版提供校验和，按平台选取，不需要下载全部镜像。
 
+`main` 分支新增了可选“AI 任务助手”：由 DSH、Codex 等主 Agent 派单，项目持续调用网页中配置的执行模型。此功能默认关闭，尚未包含在已发布的 `0.2.0-preview.1` 发行包中；已通过自动化与部分隔离 Mock 浏览器检查，真实模型及游戏仍待验收。见 [使用说明](docs/DECISION_EXECUTOR.md) 与 [本轮复核报告](DECISION_EXECUTOR_HANDOVER_REPORT.md)。
+
 | 发行包 | 用途 | 安装说明 |
 | --- | --- | --- |
 | Windows x64 ZIP | Bridge + Web + Mod；需 Node >=22.13 | 本页快速开始与包内启动说明 |
@@ -12,7 +14,7 @@
 | Docker 三个镜像归档 | Bridge / 图形游戏环境 / Mod 编译工具，按需加载 | [Docker 安装](docs/DOCKER_INSTALL.md) |
 | Docker source ZIP | Compose、管理脚本、完整公开源码，可本地重建镜像 | [Docker 开发](docs/DOCKER_DEVELOPMENT.md) |
 
-历史首轮 Linux 验证记录保留在 [LINUX_VALIDATION_REPORT.md](LINUX_VALIDATION_REPORT.md)。当前测试数量、完整包和 Docker 验证以本页顶部的 2026-10-29 报告为准。
+历史首轮 Linux 验证记录保留在 [LINUX_VALIDATION_REPORT.md](LINUX_VALIDATION_REPORT.md)。已发布 `0.2.0-preview.1` 的测试数量、完整包和 Docker 验证以本页顶部的 2026-10-29 报告为准；`main` 分支新增任务助手的验证见上述本轮复核报告。
 
 让**任意本地 MCP Agent**（DSH、Codex CLI、Claude Code……）观察并操作真实的星露谷游戏：一个 SMAPI Mod + 一个常驻本机 Bridge + 一个 Web 控制台，共用同一套游戏能力与同一份动作账本。
 
@@ -29,7 +31,7 @@ Agent 宿主（DSH / Codex / Claude Code）
    │  标准 MCP（Streamable HTTP，或 stdio 适配器）
    ▼
 Bridge 常驻进程（127.0.0.1:17655）           ← 唯一业务核心 control-core
-   ├── MCP 工具面（29 个 stardew_* 工具）
+   ├── MCP 工具面（33 个 stardew_* 工具，含 4 个可选决策工具）
    ├── Web 控制台（状态 / 时间线 / 配置向导 / 人工接管）
    ├── 动作账本（SQLite：actionId 去重、终态缓存、未决动作）
    └── 控制权（控制会话 + 租约 + 写者独占）
@@ -115,7 +117,7 @@ npm run doctor
 
 完整步骤见 [docs/LINUX_INSTALL.md](docs/LINUX_INSTALL.md)，规则与代码边界见 [docs/LINUX_DEVELOPMENT.md](docs/LINUX_DEVELOPMENT.md)，平台差异见 [docs/PLATFORM_MATRIX.md](docs/PLATFORM_MATRIX.md)。
 
-## 3. 工具面（29 个）
+## 3. 工具面（33 个）
 
 | 类别 | 工具 | 说明 |
 | --- | --- | --- |
@@ -131,6 +133,7 @@ npm run doctor
 | 写 | `stardew_fish`、`stardew_combat` | 有界钓鱼（≤55 秒）、有界战斗（≤10 秒，含停手生命阈值） |
 | 写 | `stardew_load` | 加载指定存档（`saveId` 必须来自 `stardew_saves`） |
 | 控制 | `stardew_session`、`stardew_stop` | 获取/续租/释放控制权；**只**停止调用方自己的动作 |
+| 决策（可选） | `stardew_context`、`stardew_task`、`stardew_task_status`、`stardew_memory` | 读取派单上下文与短期 token；派单/暂停/恢复/取消/答复/审核；查询与长轮询；任务记忆。**默认关闭**，开启后才可用，详见 [docs/DECISION_EXECUTOR.md](docs/DECISION_EXECUTOR.md) |
 
 写工具统一接受可选 `actionId`（缺省由 Bridge 生成）与可选 `controlSessionId`（单活跃会话时自动推断，歧义时报 `CONTROL_REQUIRED`）。
 
@@ -143,6 +146,7 @@ npm run doctor
 - **写者独占**：没有控制会话的写请求一律拒绝；租约到期、连接断开、换存档、人工接管都会让旧 `epoch` 失效。
 - **结果不明就停**：网络断开、超时、异常一律返回 `unknown` + `effectKnown=false`，指引 Agent 先查询/观察，**不允许**换新 ID 重放消费动作（同 `actionId` 不同参数会被 `IDEMPOTENCY_CONFLICT` 拒绝）。
 - **没有调试后门**：`warp`、`resource`、`skipevent`、`diag` 等命令在 Mod 协议与工具面都不存在；工具面里也没有任何"直接改存档"的入口。
+- **可选执行器默认关闭**：开启后由 Bridge 调用你配置的执行模型；密钥独立存放，执行模型只能使用政策允许的游戏工具，控制/派单/配置/存档/联机/文件工具永不暴露。人工停止（F9、网页接管）优先于模型回答。
 
 ## 5. 数据目录
 
@@ -156,6 +160,9 @@ Windows 默认 `%LOCALAPPDATA%\StardewAgentBridge`；Linux 默认 `$XDG_DATA_HOM
 | `ledger.sqlite` | 动作账本：actionId、参数指纹、终态、控制会话 |
 | `logs/bridge.log` | 运行日志（已脱敏，不含令牌与绝对用户路径） |
 | `exports/`、`screenshots/` | 导出的问题包与截图 |
+| `decision/config.json` | 仅可选执行器使用：provider、政策、预算、授权客户端、profile（非敏感） |
+| `decision/secrets.json` | 仅可选执行器使用：执行模型凭据（**敏感**，0600；不回显、不进日志） |
+| `decision/decision.sqlite` | 仅可选执行器使用：任务、run、步骤、事件、观察摘要、动作引用、记忆 |
 
 ## 6. 开发
 

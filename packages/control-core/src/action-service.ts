@@ -54,7 +54,7 @@ import type { EventLog } from './event-log.js';
 export interface ToolContext {
     clientId: string;
     clientName: string;
-    transport: 'http' | 'stdio' | 'web' | 'cli';
+    transport: 'http' | 'stdio' | 'web' | 'cli' | 'decision';
     signal?: AbortSignal;
 }
 
@@ -732,9 +732,12 @@ export class ActionService {
                 gameVersion: hello?.gameVersion ?? null,
                 smapiVersion: hello?.smapiVersion ?? null,
                 saveLoaded: hello?.saveLoaded ?? false,
-                worldGeneration: this.world.worldGeneration,
+                // Hello 自带 worldGeneration；首帧快照之前桥接层也要能给出临时作用域。
+                worldGeneration: this.world.worldGeneration ?? hello?.worldGeneration ?? null,
                 sceneGeneration: this.world.sceneGeneration,
                 capabilities: hello?.capabilities ?? [],
+                // 执行器靠这份白名单推导“当前 Mod 实际能写什么”，缺省为空表示不可写。
+                writeCommands: hello?.writeCommands ?? [],
                 lastHeartbeatAt: this.mod.lastHeartbeatAt ? new Date(this.mod.lastHeartbeatAt).toISOString() : null,
                 paused: (hello?.pause?.state as BridgeStatus['mod']['paused']) ?? 'unknown',
                 epoch: hello?.epoch ?? 0,

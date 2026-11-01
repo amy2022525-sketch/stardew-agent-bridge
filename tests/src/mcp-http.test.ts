@@ -8,6 +8,7 @@ import { after, describe, it } from 'node:test';
 import { Client } from '@modelcontextprotocol/client';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import { TOOLS } from '@sab/contracts';
 import { startStack, type Stack } from './helpers.js';
 
 const stacks: Stack[] = [];
@@ -80,7 +81,7 @@ describe('HTTP MCP', () => {
         const s = await stack();
         const client = await httpClient(s);
         const { tools } = await client.listTools();
-        assert.equal(tools.length, 29);
+        assert.equal(tools.length, TOOLS.length);
         const names = tools.map((tool) => tool.name).sort();
         assert.ok(names.includes('stardew_snapshot'));
         assert.ok(names.includes('stardew_session'));

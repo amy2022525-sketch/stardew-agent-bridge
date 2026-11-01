@@ -301,9 +301,24 @@ public sealed class Observations
             equipment = new { hat = EquipmentItem(Game1.player.hat.Value), boots = EquipmentItem(Game1.player.boots.Value), leftRing = EquipmentItem(Game1.player.leftRing.Value), rightRing = EquipmentItem(Game1.player.rightRing.Value), shirt = EquipmentItem(Game1.player.shirtItem.Value), pants = EquipmentItem(Game1.player.pantsItem.Value) },
             weather = new { raining = Game1.isRaining, snowing = Game1.isSnowing, outdoors = location.IsOutdoors },
             mine = location is MineShaft shaft ? new { level = shaft.mineLevel, stonesRemaining = shaft.stonesLeftOnThisLevel } : null,
+            // 稳定存档身份：与 Hello 同源、同规范；只读原生字段，不读存档文件。
+            worldIdentity = Context.IsWorldReady && Game1.player != null
+                ? WorldIdentity.Create(true, Game1.uniqueIDForThisGame, Game1.player.UniqueMultiplayerID)
+                : null,
             inventory, control = ControlState(), navigation = new { exits }, world = WorldState.Summary(),
             shipping = location is Farm shippingFarm ? shippingFarm.getShippingBin(Game1.player).Select(i => new { itemId = i.QualifiedItemId, count = i.Stack, quality = i.Quality }).ToArray() : null,
-            observation = new { radius, center = Tile(center), truncated = center.X - radius > 0 || center.Y - radius > 0 || center.X + radius < width - 1 || center.Y + radius < height - 1, width, height }, entities, menu };
+            // truncated 表示“请求半径超出地图边界，本次观察不完整”。原实现把内缩窗口误标为截断，
+            // 会让完成判定永远 unverifiable；这里改为真正的越界判断，并补充 bounds 供归一化推导覆盖范围。
+            observation = new
+            {
+                radius,
+                center = Tile(center),
+                truncated = center.X - radius < 0 || center.Y - radius < 0
+                    || center.X + radius > width - 1 || center.Y + radius > height - 1,
+                width,
+                height,
+                bounds = new { x = center.X - radius, y = center.Y - radius, width = radius * 2 + 1, height = radius * 2 + 1 }
+            }, entities, menu };
     }
     // 只读诊断：用于解释「为什么动不了 / 出口在哪」，不改变任何游戏状态。
     public object Diagnostic(int radius = 12)

@@ -147,7 +147,7 @@ Mod 在自己的内存里记录已见 `actionId` 与参数指纹：
 - 传输：`POST /mcp`（Streamable HTTP）。工具用 JSON Schema 注册（`fromJsonSchema`）。
 - Bearer 身份绑定调用与会话。旧 `2025-11-25` 协议使用有状态 HTTP 传输，现代 `2026-07-28` 使用 SDK 新传输；取消信号沿 MCP → control-core 定向停止该调用已经派发的动作。HTTP 请求断开和 stdio 取消也转发停止；不能保证宿主断开前未发生消费。
 - 返回：文本摘要（给人/无视觉能力模型读）+ `structuredContent`（机器读）+ 截图工具额外返回 `image`。失败时 `isError=true`，文本首行固定为 `错误 <CODE>: <message>（effectKnown=… 下一步=…）`，并同时给出 `structuredContent.error`。
-- 29 个工具与分类见 [README](../README.md) §3。
+- 33 个工具与分类见 [README](../README.md) §3（原 29 个 + 4 个可选决策工具）。
 
 写工具的公共参数：
 
@@ -254,3 +254,37 @@ Mod 在自己的内存里记录已见 `actionId` 与参数指纹：
 | `stardew_stop` 可停任意动作 | 只停调用方自己的动作，人工急停走网页/热键 | 避免一个 Agent 打断另一个 Agent 的合法动作 |
 | 计划中的独立"查询动作"工具 | 由 `stardew_status` 返回未决动作 + 账本回执，不额外增加工具 | 工具面保持 28 个，避免同类入口分叉 |
 | Mod 侧 `diag` 诊断命令 | 删除（无引用） | 与"不留内部调试通道"一致；诊断走 `/api/v1/diagnostics` |
+
+## 10. 决策工具（可选执行器）
+
+四个工具与其他工具共用同一 MCP 工具面，但不转发给 Mod：
+
+| 工具 | operation | 只读 | 说明 |
+| --- | --- | --- | --- |
+| `stardew_context` | current | 是 | 世界身份、开关、停止锁、可用 provider/policy；在线时签发 60 秒 `contextToken` |
+| `stardew_task` | submit/update/pause/resume/cancel/reply/resolve | 否 | 持久任务；`requestId` 幂等；`ownerClientId` 来自认证层 |
+| `stardew_task_status` | get/list/wait | 是 | 不延长租约；`wait` ≤15 秒，每客户端最多 2 个并发等待 |
+| `stardew_memory` | search/get/add/update/archive | mixed | 按 operation 严格认证；add/update 必须声明来源 |
+
+关键语义：
+
+- `accepted:true` 只表示接单成功；完成由后续状态查询给出。
+- `pause`/`cancel` 不需要 `expectedRevision`；`update`/`resume`/`reply`/`resolve` 需要。
+- `requestId` 同键同内容回放原结果；同键不同内容返回 `TASK_IDEMPOTENCY_CONFLICT`。
+- `contextToken` 只绑定世界，不授予工具权限；消费后需重新获取。
+- `wait` 超时/客户端断开只结束等待，不取消任务。
+
+### 10.1 新增错误码
+
+`DECISION_DISABLED`、`DECISION_NOT_AUTHORIZED`、`EXECUTOR_BUSY`、`PROVIDER_NOT_CONFIGURED`、`PROVIDER_AUTH_FAILED`、`PROVIDER_UNSUPPORTED`、`PROVIDER_RATE_LIMITED`、`PROVIDER_TIMEOUT`、`DECISION_OUTPUT_INVALID`、`POLICY_DENIED`、`BUDGET_EXHAUSTED`、`WORLD_IDENTITY_UNAVAILABLE`、`TASK_SCOPE_CHANGED`、`CONTEXT_EXPIRED`、`TASK_REVISION_CONFLICT`、`TASK_IDEMPOTENCY_CONFLICT`、`PAUSE_NOT_CONFIRMED`、`USER_STOP_LATCHED`、`TASK_STORAGE_UNAVAILABLE`、`TASK_STALLED`、`MULTIPLAYER_AUTOMATION_UNSUPPORTED`。
+
+旧错误码语义保持不变；未知动作对任务是 `needs_review`，不是“换 ID 重试”。
+
+### 10.2 协议字段扩展
+
+- `hello.worldIdentity` 与 `snapshot.worldIdentity` 为**可选只读**字段：
+  `{ schemaVersion: 1, source: 'native_game', worldId: string, actorFarmerId: string }`。
+- `worldId` 是原生 `Game1.uniqueIDForThisGame` 的 invariant 十进制字符串；
+  `actorFarmerId` 是规范 Int64 字符串，**不得转成 JS Number**。
+- 旧 Mod 不提供时按缺失处理：持久任务返回 `WORLD_IDENTITY_UNAVAILABLE`，只能用显式 `ephemeral` 作用域。
+- `snapshot.observation.bounds` 用于推导覆盖范围；`truncated=true` 时完成判定一律 `unverifiable`。

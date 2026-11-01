@@ -101,6 +101,138 @@
             <p class="notice" id="multiplayer-notice" role="status" aria-live="polite"></p>
         </section>
 
+        <section class="card" id="decision-card" data-testid="decision-panel">
+            <div class="card-heading">
+                <h2>AI 任务助手</h2>
+                <span class="pill" id="decision-pill" data-testid="decision-enabled">正在读取…</span>
+            </div>
+            <p class="hint">主模型派任务，执行模型负责游戏里的具体操作。默认关闭；关闭时不会调用模型，也不会读取密钥内容。</p>
+            <dl class="grid" id="decision-summary" data-testid="decision-summary"></dl>
+            <div class="actions">
+                <button id="btn-decision-toggle" type="button" class="primary" data-testid="decision-toggle">启用</button>
+                <button id="btn-decision-arm" type="button" data-testid="decision-arm" disabled>允许自动执行</button>
+                <button id="btn-decision-settings" type="button" data-testid="provider-dialog-open">设置模型</button>
+            </div>
+            <p class="notice" id="decision-notice" role="status" aria-live="polite"></p>
+
+            <h3>当前任务</h3>
+            <p class="decision-task-title" id="decision-task-title" data-testid="task-title">没有进行中的自动任务。</p>
+            <dl class="grid">
+                <dt>状态</dt>
+                <dd id="decision-task-state" data-testid="task-state">—</dd>
+                <dt>进度</dt>
+                <dd id="decision-task-progress" data-testid="task-progress">—</dd>
+                <dt>当前步骤</dt>
+                <dd id="decision-task-step">—</dd>
+                <dt>最近情况</dt>
+                <dd id="decision-task-last">—</dd>
+            </dl>
+            <p class="notice" id="decision-blocker" data-testid="blocker"></p>
+            <p class="hint" id="decision-usage" data-testid="usage"></p>
+            <div class="actions">
+                <button id="btn-task-resume" type="button" data-testid="task-resume" disabled>继续任务</button>
+                <button id="btn-task-pause" type="button" data-testid="task-pause" disabled>暂停任务</button>
+                <button id="btn-task-cancel" type="button" class="danger" data-testid="task-cancel" disabled>取消任务</button>
+                <button id="btn-task-takeover" type="button" data-testid="task-takeover" disabled>停止并由我接管</button>
+                <button id="btn-task-events" type="button" disabled>查看动作依据</button>
+                <button id="btn-task-accept" type="button" data-testid="task-resolve-accept" disabled>接受完成候选</button>
+                <button id="btn-task-reject" type="button" data-testid="task-resolve-reject" disabled>拒绝完成候选</button>
+            </div>
+            <label class="decision-inline" for="decision-resolve-note">复核说明
+                <input id="decision-resolve-note" type="text" maxlength="500" placeholder="例如：已在游戏里确认两格作物已浇水" />
+            </label>
+            <pre id="decision-events" class="mono small hidden" data-testid="task-events"></pre>
+
+            <details id="decision-settings" data-testid="provider-dialog">
+                <summary>执行模型与操作范围设置</summary>
+                <form id="decision-form" class="decision-form" novalidate>
+                    <label for="decision-protocol">接口协议
+                        <select id="decision-protocol">
+                            <option value="openai-chat-compatible">兼容 API（chat/completions）</option>
+                            <option value="openai-responses">Responses API</option>
+                        </select>
+                    </label>
+                    <label for="decision-base-url">服务地址（含 API 前缀，例如以 /v1 结尾）
+                        <input id="decision-base-url" type="url" spellcheck="false" autocomplete="off" placeholder="http://127.0.0.1:1234/v1" required />
+                    </label>
+                    <label for="decision-model">模型 ID
+                        <input id="decision-model" type="text" spellcheck="false" autocomplete="off" placeholder="由本地服务提供的模型名" required />
+                    </label>
+                    <label for="decision-auth-mode">鉴权方式
+                        <select id="decision-auth-mode">
+                            <option value="none">无（本地服务）</option>
+                            <option value="bearer">Bearer 密钥</option>
+                        </select>
+                    </label>
+                    <label for="decision-secret">密钥（保存后不回显）
+                        <input id="decision-secret" type="password" spellcheck="false" autocomplete="new-password" placeholder="留空表示不修改" />
+                    </label>
+                    <label for="decision-format">结构化输出
+                        <select id="decision-format">
+                            <option value="json_schema">json_schema（严格）</option>
+                            <option value="json_object">json_object</option>
+                            <option value="plain_json">纯文本 JSON（兼容模式）</option>
+                        </select>
+                    </label>
+                    <label for="decision-policy">操作范围
+                        <select id="decision-policy">
+                            <option value="observe-move">只观察与移动</option>
+                            <option value="farm-care">农场照料（浇水）</option>
+                        </select>
+                    </label>
+                    <label for="decision-profile">存档记忆分组
+                        <select id="decision-profile"></select>
+                    </label>
+                    <label for="decision-profile-id">新分组 ID（字母/数字，用于区分复制存档）
+                        <input id="decision-profile-id" type="text" maxlength="80" spellcheck="false" autocomplete="off" placeholder="second-save" />
+                    </label>
+                    <label for="decision-profile-label">新分组显示名
+                        <input id="decision-profile-label" type="text" maxlength="80" autocomplete="off" placeholder="第二个存档" />
+                    </label>
+                    <div class="actions">
+                        <button id="btn-decision-add-profile" type="button">新建分组</button>
+                    </div>
+                    <label for="decision-clients">允许派单的 Agent（逗号分隔已注册 clientId）
+                        <input id="decision-clients" type="text" spellcheck="false" autocomplete="off" placeholder="dsh,codex" />
+                    </label>
+                    <label class="decision-check" for="decision-private">
+                        <input id="decision-private" type="checkbox" /> 允许连接本机/私网地址
+                    </label>
+                    <label class="decision-check" for="decision-http">
+                        <input id="decision-http" type="checkbox" /> 允许明文 HTTP（仅本机可信服务）
+                    </label>
+                    <label class="decision-check" for="decision-sharing">
+                        <input id="decision-sharing" type="checkbox" /> 允许其他 Agent 只读查看同一分组的任务（不授予修改权）
+                    </label>
+                    <label for="decision-budget-calls">每任务模型请求上限
+                        <input id="decision-budget-calls" type="number" min="1" max="60" step="1" />
+                    </label>
+                    <label for="decision-budget-actions">每任务写动作上限
+                        <input id="decision-budget-actions" type="number" min="1" max="80" step="1" />
+                    </label>
+                    <label for="decision-budget-ms">每任务运行时长上限（毫秒）
+                        <input id="decision-budget-ms" type="number" min="10000" max="600000" step="1000" />
+                    </label>
+                    <label for="decision-budget-tokens">每任务 token 上限
+                        <input id="decision-budget-tokens" type="number" min="1000" max="120000" step="1000" />
+                    </label>
+                    <div class="actions">
+                        <button id="btn-decision-save" type="submit" class="primary">保存设置</button>
+                        <button id="btn-decision-probe" type="button">检测模型</button>
+                        <button id="btn-decision-clear-secret" type="button">清除密钥</button>
+                    </div>
+                    <p class="hint">“检测模型”会真实发起一次最多 64 token 的模型请求，可能产生费用；保存设置本身不会调用服务商。</p>
+                    <p class="notice" id="decision-form-notice" role="status" aria-live="polite"></p>
+                </form>
+            </details>
+
+            <h3>任务历史</h3>
+            <ul id="decision-tasks" class="notes" data-testid="task-history"></ul>
+            <h3>记忆</h3>
+            <ul id="decision-memories" class="notes" data-testid="memory-list"></ul>
+            <p class="hint">记忆是数据，不会改变工具权限、预算或操作范围；跨客户端共享需要在此明确打开。</p>
+        </section>
+
         <section class="card" id="control-card">
             <h2>控制权</h2>
             <dl class="grid" id="control-grid"></dl>

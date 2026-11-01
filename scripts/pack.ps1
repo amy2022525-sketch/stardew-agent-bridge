@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     打包发布目录（本地产物，不上传）。
 .DESCRIPTION
@@ -69,7 +69,7 @@ foreach ($doc in @('README.md', 'README.en.md', 'LICENSE', 'NOTICE.md', 'CHANGEL
     $source = Join-Path $repo $doc
     if (Test-Path $source) { Copy-Item $source $out }
 }
-foreach ($doc in @('ACCEPTANCE.md', 'AGENT_GUIDE.md', 'CLIENTS.md', 'PROTOCOL.md', 'EVIDENCE.md', 'MIGRATION.md', 'TROUBLESHOOTING.md', 'MULTIPLAYER_INSTALL.md', 'MULTIPLAYER_ACCEPTANCE.md', 'DOCKER_INSTALL.md', 'PLATFORM_MATRIX.md', 'RELEASE_VALIDATION_20261029.md')) {
+foreach ($doc in @('ACCEPTANCE.md', 'AGENT_GUIDE.md', 'CLIENTS.md', 'PROTOCOL.md', 'EVIDENCE.md', 'MIGRATION.md', 'TROUBLESHOOTING.md', 'MULTIPLAYER_INSTALL.md', 'MULTIPLAYER_ACCEPTANCE.md', 'DOCKER_INSTALL.md', 'PLATFORM_MATRIX.md', 'RELEASE_VALIDATION_20261029.md', 'DECISION_EXECUTOR.md', 'DECISION_EXECUTOR_ACCEPTANCE.md')) {
     $source = Join-Path $repo "docs\$doc"
     if (Test-Path $source) { Copy-Item $source (Join-Path $out 'docs') }
 }

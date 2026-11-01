@@ -37,7 +37,7 @@ node -- scripts/docker/manage.mjs status --project sab-local --env-file "$HOME/.
 
 `example.env` 默认外部端口为 18055，浏览器打开 `http://127.0.0.1:18055/`。只对宿主回环暴露网关 17656，Bridge 自身的 17655 和 Mod 的 17654 均在容器内部。修改端口时同时修改 `SAB_HTTP_PORT` 与 `SAB_PUBLIC_BASE_URL`，后者不带末尾 `/`。
 
-`bridge_ready` 表示 Web/MCP 服务可用，不表示游戏已连接。没有游戏时仍能发现 29 个工具、生成连接配置、查询状态；游戏工具会返回未连接。
+`bridge_ready` 表示 Web/MCP 服务可用，不表示游戏已连接。没有游戏时仍能发现 33 个工具、生成连接配置、查询状态；游戏工具会返回未连接。
 
 ## 3. 接入 DSH、Codex 或 Claude Code
 

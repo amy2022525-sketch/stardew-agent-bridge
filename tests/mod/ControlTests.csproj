@@ -10,6 +10,7 @@
     <Compile Include="../../mods/StardewAgentBridge/ControlAuthority.cs" Link="ControlAuthority.cs" />
     <Compile Include="../../mods/StardewAgentBridge/ActionCoordinator.cs" Link="ActionCoordinator.cs" />
     <Compile Include="../../mods/StardewAgentBridge/Protocol.cs" Link="Protocol.cs" />
+    <Compile Include="../../mods/StardewAgentBridge/WorldIdentity.cs" Link="WorldIdentity.cs" />
     <Compile Include="../../mods/StardewAgentBridge/PlatformPaths.cs" Link="PlatformPaths.cs" />
     <Compile Include="../../mods/StardewAgentBridge/Multiplayer/Contracts.cs" Link="Multiplayer/Contracts.cs" />
     <Compile Include="../../mods/StardewAgentBridge/Multiplayer/SessionMachine.cs" Link="Multiplayer/SessionMachine.cs" />

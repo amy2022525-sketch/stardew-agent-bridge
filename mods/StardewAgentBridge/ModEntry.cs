@@ -407,6 +407,10 @@ public sealed class ModEntry : Mod
             pause = ControlAuthority.PauseState(control.SelfPauseOpened),
             watchdog = new { bridgeLinkUp, lastHeartbeatAt = server?.LastFrameAt?.ToString("o"), linkTimeoutSeconds = config.LinkTimeoutSeconds },
             window = new { active = GameRunner.instance.IsActive, title = Game1.game1?.Window?.Title },
+            // 可选只读扩展：稳定存档身份。世界未就绪为 null；旧版 Bridge 会忽略该字段。
+            worldIdentity = Context.IsWorldReady && Game1.player != null
+                ? WorldIdentity.Create(true, Game1.uniqueIDForThisGame, Game1.player.UniqueMultiplayerID)
+                : null,
             realtimeInput = RealtimeActions.InputStatus,
             features = new
             {

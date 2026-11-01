@@ -5,6 +5,7 @@
     { "path": "packages/platform" },
     { "path": "packages/game-client" },
     { "path": "packages/control-core" },
+    { "path": "packages/decision-core" },
     { "path": "packages/mcp" },
     { "path": "apps/server" },
     { "path": "adapters/stdio" },

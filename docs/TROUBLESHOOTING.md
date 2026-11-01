@@ -136,3 +136,18 @@ Linux 日志与现场位置：
 排障顺序建议：`doctor --json` → `<数据根>/logs/bridge.log` 末 50 行 → Mod 的
 `DataDirectory` 与 Bridge 数据根是否同一绝对路径 → 端口/锁 → SMAPI 日志
 （`<游戏目录>/smapi-internal` 与 `%SMAPI%` 输出的 `SMAPI-latest.txt`）。
+## 11. AI 任务助手（可选执行器）
+
+| 现象 | 原因 | 处理 |
+| --- | --- | --- |
+| 派单返回 `DECISION_DISABLED` | 功能未启用，或配置无法解析，或任务库不可写 | 打开 Web → “AI 任务助手”检查健康状态；损坏的配置文件不会被自动删除 |
+| `PROVIDER_NOT_CONFIGURED` | 未指定默认执行模型，或缺凭据 | 设置模型并保存；`authMode=bearer` 必须单独写入密钥 |
+| `PROVIDER_AUTH_FAILED` | 401/403 | 修正密钥；不会隐式换供应商 |
+| `PROVIDER_UNSUPPORTED` | 协议/结构化输出模式不被该服务接受 | 换协议或把 `decisionFormat` 改为 `json_object`/`plain_json`；本地校验不会因此关闭 |
+| `EXECUTOR_BUSY` | 已有未结束自动任务 | 处理现有任务；本版不排队 |
+| `CONTROL_BUSY` | 控制权在他人（含直接模式 Agent）手里 | 先结束那个会话，不要期待自动抢占 |
+| `PAUSE_NOT_CONFIRMED` | 请求了暂停但游戏没确认 paused | 等游戏完成暂停；不要把 `requested:true` 当时间停止 |
+| `USER_STOP_LATCHED` | F9 或网页接管后留下的停止锁 | 在 Web 点“允许自动执行”，再显式 resume |
+| `TASK_SCOPE_CHANGED` | 存档/角色/日期/实例变化 | 复核后新建任务；不要迁移旧目标 |
+| `needs_review` | 有动作结果未知 | 按 `actionId` 查原收据；不要用新 ID 重做消费动作 |
+| 网页显示“待配置”但旧工具可用 | 执行模型是可选扩展 | 预期行为；不配置不影响直接模式 |

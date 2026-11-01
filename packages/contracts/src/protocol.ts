@@ -118,6 +118,26 @@ export interface ModEvent {
 export type ModFrame = ModRequest | ModResponse | ModEvent;
 
 /** Mod 握手结果（`hello` 命令）。 */
+/**
+ * 稳定存档身份（07.2）：Hello 与 Snapshot 的可选只读兼容扩展。
+ * worldId 取 Game1.uniqueIDForThisGame 的 invariant 十进制字符串；
+ * actorFarmerId 为规范 Int64 字符串，禁止转换为 JS Number。
+ * 世界未就绪为 null；旧 Mod 未提供按缺失处理。
+ */
+export interface WorldIdentity {
+    schemaVersion: 1;
+    source: 'native_game';
+    worldId: string;
+    actorFarmerId: string;
+}
+
+/** 观察覆盖范围（12.1）：bounds 由 Mod 上报；complete 表示本次观察未被截断。 */
+export interface SnapshotCoverage {
+    location: string;
+    bounds: { x: number; y: number; width: number; height: number };
+    complete: boolean;
+}
+
 export interface ModHello {
     mode: 'game';
     kind: 'hello';
@@ -140,6 +160,8 @@ export interface ModHello {
     watchdog: { bridgeLinkUp: boolean; lastHeartbeatAt: string | null };
     window: { active: boolean; title: string };
     features: Record<string, boolean | number>;
+    /** 可选稳定存档身份；旧 Mod 不提供时缺失。 */
+    worldIdentity?: WorldIdentity | null;
 }
 
 /** Mod 侧控制权结果。 */
@@ -256,6 +278,8 @@ export interface ModLinkStatus {
     worldGeneration: number | null;
     sceneGeneration: number | null;
     capabilities: string[];
+    /** Mod 声明的可写命令白名单（来自 hello）；执行器用它推导可用工具。 */
+    writeCommands: string[];
     lastHeartbeatAt: string | null;
     paused: PauseState;
     epoch: number;
@@ -267,7 +291,8 @@ export interface ModLinkStatus {
 export interface ClientPresence {
     clientId: string;
     clientName: string;
-    transport: 'http' | 'stdio' | 'web' | 'cli';
+    /** decision：Bridge 内部执行模型的控制会话（保留前缀身份，见 §07.1）。 */
+    transport: 'http' | 'stdio' | 'web' | 'cli' | 'decision';
     lastSeenAt: string;
     toolCalls: number;
 }
@@ -337,6 +362,10 @@ export interface SnapshotSummary {
     control: { ready: boolean; blockedBy: string[] };
     shipping: { itemId: string; count: number; quality: number }[] | null;
     truncated: boolean;
+    /** Mod 透传的稳定存档身份（可选只读扩展）。 */
+    worldIdentity?: WorldIdentity | null;
+    /** 观察覆盖范围；Mod 未上报 bounds 时缺失。 */
+    coverage?: SnapshotCoverage;
     sampledAt: string;
 }
 

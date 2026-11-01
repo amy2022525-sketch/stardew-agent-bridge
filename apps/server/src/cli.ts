@@ -347,6 +347,16 @@ interface DoctorReport {
     credentials: { path: string; exists: boolean; clients: string[] };
     ledger: { path: string; exists: boolean; bytes: number | null; directoryWritable: boolean | null };
     web: { distPath: string; indexExists: boolean };
+    /** 可选执行器的只读概况：doctor 绝不创建/迁移任务库，也不读取密钥内容。 */
+    decision: {
+        configExists: boolean;
+        enabled: boolean;
+        configValid: boolean;
+        databaseExists: boolean;
+        databaseBytes: number | null;
+        schemaVersion: number | null;
+        note: string | null;
+    };
     mod: {
         checked: boolean;
         configs: {
@@ -372,6 +382,61 @@ function directoryWritable(dir: string): boolean | null {
     } catch {
         return null;
     }
+}
+
+/**
+ * 只读检查可选执行器：只读 config.json 与 decision.sqlite 的 meta 行。
+ * 不实例化 DecisionStore（那会执行迁移），不读取 secrets.json 内容。
+ */
+async function inspectDecisionState(paths: DataPaths): Promise<DoctorReport['decision']> {
+    const result: DoctorReport['decision'] = {
+        configExists: existsSync(paths.decisionConfig),
+        enabled: false,
+        configValid: !existsSync(paths.decisionConfig),
+        databaseExists: existsSync(paths.decisionDb),
+        databaseBytes: null,
+        schemaVersion: null,
+        note: null
+    };
+    if (result.configExists) {
+        try {
+            const raw = readJsonIfExists<Record<string, unknown>>(paths.decisionConfig);
+            result.configValid = raw !== null && typeof raw === 'object';
+            result.enabled = raw?.['enabled'] === true;
+            if (!result.configValid) result.note = '决策配置无法解析；执行器会降级为禁用，原文件不会被删除。';
+        } catch (error) {
+            result.configValid = false;
+            result.note = '决策配置无法解析：' + (error instanceof Error ? error.message.slice(0, 120) : '未知错误');
+        }
+    }
+    if (result.databaseExists) {
+        try {
+            result.databaseBytes = statSync(paths.decisionDb).size;
+            const module = (await import('node:sqlite')) as {
+                DatabaseSync?: new (file: string, options?: { readOnly?: boolean }) => {
+                    prepare(sql: string): { get(): unknown };
+                    close(): void;
+                };
+            };
+            const Ctor = module.DatabaseSync;
+            if (Ctor) {
+                const db = new Ctor(paths.decisionDb, { readOnly: true });
+                try {
+                    const row = db.prepare("SELECT value FROM meta WHERE key='schema_version'").get() as { value?: unknown } | undefined;
+                    const version = Number(row?.value);
+                    if (Number.isSafeInteger(version) && version > 0) result.schemaVersion = version;
+                } finally {
+                    db.close();
+                }
+            }
+        } catch {
+            result.note = result.note ?? '任务库存在但无法只读打开；执行器会报告 TASK_STORAGE_UNAVAILABLE。';
+        }
+    }
+    if (result.enabled && !result.databaseExists) {
+        result.note = result.note ?? '配置已启用但任务库尚未创建；首次 start 时创建。';
+    }
+    return result;
 }
 
 async function cmdDoctor(flags: Record<string, FlagValue>): Promise<number> {
@@ -562,6 +627,7 @@ async function cmdDoctor(flags: Record<string, FlagValue>): Promise<number> {
             directoryWritable: directoryWritable(paths.root)
         },
         web: { distPath: paths.webDist, indexExists: existsSync(path.join(paths.webDist, 'index.html')) },
+        decision: await inspectDecisionState(paths),
         mod: { checked: modConfigs.length > 0, configs: modConfigs, bridgeModDirs },
         problems,
         problemCodes: [...new Set(problems.map((problem) => problem.code))]
@@ -581,6 +647,17 @@ async function cmdDoctor(flags: Record<string, FlagValue>): Promise<number> {
     lines.push(`  凭据       ：${credentialsRaw ? `已存在（客户端：${clients.join(', ') || '无'}；不显示内容）` : '缺失（首次 start/launch 时创建）'}`);
     lines.push(`  账本       ：${existsSync(paths.ledger) ? `已存在（${ledgerBytes ?? '?'} 字节）` : '尚未创建（首次 start 时创建）'}`);
     lines.push(`  Web 产物   ：${report.web.indexExists ? '已构建' : '缺失（运行 npm run build）'}`);
+    const decision = report.decision;
+    const decisionState = !decision.configExists
+        ? '未配置（默认关闭）'
+        : !decision.configValid
+            ? '配置损坏（执行器禁用）'
+            : decision.enabled ? '已启用' : '已停用';
+    const dbState = decision.databaseExists
+        ? `任务库已存在${decision.schemaVersion !== null ? ` v${decision.schemaVersion}` : ''}（${decision.databaseBytes ?? '?'} 字节）`
+        : '任务库尚未创建';
+    lines.push(`  AI 任务助手：${decisionState}；${dbState}`);
+    if (decision.note) lines.push(`                ${decision.note}`);
     if (health) {
         lines.push(`  Bridge     ：运行中 http://127.0.0.1:${health.port}/（版本 ${health.bridgeVersion}）`);
         lines.push(`  Mod 连接   ：${health.modConnected ? '已连接' : '未连接'}${health.gameVersion ? `（游戏 ${health.gameVersion}）` : ''}`);

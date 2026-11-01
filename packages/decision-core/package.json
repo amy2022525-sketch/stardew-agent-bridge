@@ -1,0 +1,19 @@
+{
+  "name": "@sab/decision-core",
+  "version": "0.2.0-preview.1",
+  "private": true,
+  "description": "决策执行器核心：任务状态机、预算、上下文、完成判定、记忆与 Provider 抽象。",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@sab/contracts": "*",
+    "ajv": "8.20.0"
+  }
+}

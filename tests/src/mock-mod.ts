@@ -51,6 +51,16 @@ export class MockMod {
     private handlers = new Map<string, MockHandler>();
     private pendingAction: PendingAction | null = null;
     readonly requests: MockRequestRecord[] = [];
+    /** 已浇水作物地块（key = `x,y`）：让执行器的完成判定有真实可观察变化。 */
+    private readonly wateredCrops = new Set<string>();
+    private selectedSlot = 0;
+    nativeCropRefs = false;
+    wateringCanWater = 20;
+    /** 供端到端用例使用的两格作物；ref 固定，避免与既有 soil/object 用例冲突。 */
+    static readonly CROPS: readonly { ref: string; tile: { x: number; y: number } }[] = [
+        { ref: '@s1:e4', tile: { x: 13, y: 12 } },
+        { ref: '@s1:e5', tile: { x: 14, y: 12 } }
+    ];
     multiplayer: MultiplayerStatus | null = null;
     epoch = 1;
     holder: string | null = null;
@@ -288,8 +298,10 @@ export class MockMod {
         if (operation === 'acquire') {
             this.epoch += 1;
             this.holder = String(record.args['holder'] ?? 'bridge');
-            this.pauseState = 'running';
-            this.pausedBySelf = false;
+            // 分步模式取得控制后，游戏应停在菜单里；执行器会检查 requested && paused 才继续。
+            const stepMode = record.args['mode'] !== 'realtime';
+            this.pauseState = stepMode ? 'paused' : 'running';
+            this.pausedBySelf = stepMode;
         } else if (operation === 'release') {
             this.holder = null;
             if (record.args['pause'] === true) {
@@ -332,6 +344,17 @@ export class MockMod {
     }
 
     private actionResult(record: MockRequestRecord): Record<string, unknown> {
+        if (record.command === 'select' && typeof record.args['slot'] === 'number') this.selectedSlot = record.args['slot'];
+        if (record.command === 'use') {
+            const target = record.args['target'];
+            const ordinal = typeof target === 'string' ? /:e([456])$/.exec(target)?.[1] : null;
+            const crop = MockMod.CROPS.find((entry) => entry.ref.endsWith(`:e${ordinal ?? ''}`));
+            if (this.selectedSlot === 3 && ordinal === '6') this.wateringCanWater = 40;
+            else if (this.selectedSlot === 3 && crop && this.wateringCanWater > 0) {
+                this.wateredCrops.add(`${String(crop.tile.x)},${String(crop.tile.y)}`);
+                this.wateringCanWater -= 1;
+            }
+        }
         this.pauseState = 'paused';
         this.pausedBySelf = true;
         return {
@@ -367,17 +390,33 @@ export class MockMod {
                 energy: 240,
                 maxEnergy: 270,
                 position: { x: 10, y: 12 },
-                selectedSlot: 0,
+                selectedSlot: this.selectedSlot,
                 maxItems: 36
             },
             inventory: [
                 { slot: 0, itemId: '(T)Hoe', name: '锄头', count: 1, tool: 'Hoe' },
                 { slot: 1, itemId: '(O)472', name: '防风草种子', count: 15 },
-                { slot: 2, itemId: '(O)24', name: '防风草', count: 3, quality: 1 }
+                { slot: 2, itemId: '(O)24', name: '防风草', count: 3, quality: 1 },
+                { slot: 3, itemId: '(T)WateringCan', name: '喷壶', count: 1, tool: 'WateringCan', water: this.wateringCanWater, waterCapacity: 40 }
             ],
             entities: [
                 { ref: '@s1:e1', kind: 'soil', name: '耕地', tile: { x: 11, y: 12 }, passable: true, tilled: true, watered: false },
-                { ref: '@s1:e2', kind: 'object', name: '杂草', tile: { x: 9, y: 12 }, passable: false }
+                { ref: '@s1:e2', kind: 'object', name: '杂草', tile: { x: 9, y: 12 }, passable: false },
+                ...MockMod.CROPS.map((crop) => {
+                    const watered = this.wateredCrops.has(`${String(crop.tile.x)},${String(crop.tile.y)}`);
+                    return {
+                        ref: this.nativeCropRefs ? crop.ref.replace('@s1:', `@s${this.snapshotSeq}:`) : crop.ref,
+                        kind: 'soil',
+                        name: '防风草',
+                        tile: crop.tile,
+                        passable: true,
+                        watered,
+                        needsWater: !watered,
+                        harvestable: false,
+                        crop: '(O)24', cropState: { itemId: '(O)24', dead: false }
+                    };
+                }),
+                { ref: this.nativeCropRefs ? `@s${this.snapshotSeq}:e6` : '@s1:e6', kind: 'water', name: '水源', tile: { x: 12, y: 13 }, refillable: true }
             ],
             navigation: { exits: [{ ref: '@s1:e3', kind: 'exit', name: '农场小屋', tile: { x: 10, y: 13 } }] },
             menu: null,

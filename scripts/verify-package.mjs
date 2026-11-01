@@ -231,7 +231,7 @@ try {
     const webHeaders = { cookie, origin: url, 'content-type': 'application/json', 'x-sab-csrf': csrfToken };
     const connectionInfo = await (await fetch(url + '/api/v1/mcp', { headers: webHeaders })).json();
     assert.equal(connectionInfo.url, url + '/mcp');
-    assert.equal(connectionInfo.toolCount, 29);
+    assert.equal(connectionInfo.toolCount, 33);
     assert.deepEqual(connectionInfo.clients, []);
     pass('portable Web MCP metadata');
 
@@ -246,7 +246,7 @@ try {
         const result = await response.json();
         assert.equal(result.ok, true);
         assert.equal(result.transport, transport);
-        assert.equal(result.toolCount, 29);
+        assert.equal(result.toolCount, 33);
         assert.equal(result.modConnected, false);
         pass(`portable Web MCP ${transport} real channel check`);
     }
@@ -256,8 +256,8 @@ try {
     await http.connect(
         new StreamableHTTPClientTransport(new URL(url + '/mcp'), { authProvider: { token: async () => credentials.clients.portable.token } })
     );
-    assert.equal((await http.listTools()).tools.length, 29);
-    pass('portable HTTP MCP lists 29 tools');
+    assert.equal((await http.listTools()).tools.length, 33);
+    pass('portable HTTP MCP lists 33 tools');
     const status = await http.callTool({ name: 'stardew_status', arguments: {} });
     assert.notEqual(status.isError, true);
     pass('portable authenticated status');
@@ -300,9 +300,10 @@ try {
     pass('所有发布文件校验和一致');
 
     const forbidden = files.filter((f) =>
-        /(?:credentials\.json|endpoint\.json|bridge\.lock|\.sqlite|\.sqlite-wal|\.sqlite-shm|\.pdb|\.save|\.map|Stardew Valley\.dll|StardewModdingAPI\.dll)$/i.test(f)
+        // decision/ 是运行期数据（配置/密钥/任务库），任何一项都不属于发布包。
+        /(?:^|[\\/])decision[\\/]|(?:credentials|secrets)\.json|endpoint\.json|bridge\.lock|\.sqlite|\.sqlite-wal|\.sqlite-shm|\.pdb|\.save|\.map|Stardew Valley\.dll|StardewModdingAPI\.dll$/i.test(f)
     );
-    assert.deepEqual(forbidden, [], '发布包不得包含凭据、账本、存档、游戏程序集或源码映射');
+    assert.deepEqual(forbidden, [], '发布包不得包含凭据、密钥、账本、任务库、存档、游戏程序集或源码映射');
     const dlls = files.filter((f) => f.endsWith('.dll')).map((f) => path.basename(f));
     if (bridgeOnly) assert.deepEqual(dlls, [], 'bridge-only 包不得包含任何 DLL');
     else assert.deepEqual(dlls, ['StardewAgentBridge.dll'], '只允许分发项目自己的 Mod DLL');

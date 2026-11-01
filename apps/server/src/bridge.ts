@@ -28,10 +28,27 @@ import {
 } from '@sab/contracts';
 import { ModClient } from '@sab/game-client';
 import { ActionLedger, ActionService, ControlManager, EventLog } from '@sab/control-core';
+import {
+    ContextTokenStore,
+    DecisionRunner,
+    DecisionStore,
+    MemoryStore,
+    TaskQueryService,
+    TaskService,
+    createDecisionProvider,
+    systemClock,
+    type DecisionProvider
+} from '@sab/decision-core';
 import { createToolServer } from '@sab/mcp';
 import { PRIVATE_FILE_MODE, atomicWriteFile, processIdentityOfCurrentProcess, readJsonIfExists } from '@sab/platform';
 import { AuthStore, loadConfig, type BridgeConfig } from './config.js';
 import { ClientRegistry } from './clients.js';
+import { DecisionConfigStore, type DecisionProviderEntry } from './decision-config.js';
+import { DecisionSecretStore } from './decision-secrets.js';
+import { DecisionGamePort } from './decision-game-port.js';
+import { DecisionMemoryService } from './decision-memory.js';
+import { DecisionApi } from './decision-api.js';
+import { BridgeToolRouter } from './bridge-tool-router.js';
 import {
     parsePublicBaseUrl,
     publicMcpUrl,
@@ -82,6 +99,23 @@ export class Bridge {
     readonly control: ControlManager;
     readonly actions: ActionService;
     readonly mod: ModClient;
+    /** 可选双模型执行器：配置、凭据、任务库与既有 Bridge 文件完全分离。 */
+    readonly decisionConfig: DecisionConfigStore;
+    readonly decisionSecrets: DecisionSecretStore;
+    readonly decisionStore: DecisionStore;
+    readonly decisionGame: DecisionGamePort;
+    readonly decisionTokens = new ContextTokenStore();
+    readonly taskService: TaskService;
+    readonly taskQuery: TaskQueryService;
+    readonly decisionMemory: DecisionMemoryService;
+    readonly runner: DecisionRunner;
+    readonly toolRouter: BridgeToolRouter;
+    readonly decisionApi: DecisionApi;
+    /** 本次启动标识：fence 第一段，避免跨进程比较 generation。 */
+    readonly bootId = randomUUID();
+    private decisionRecoveryDone = false;
+    private stopping = false;
+    private readonly unsubscribeEvents: () => void;
     private readonly mcpHandler: ReturnType<typeof createMcpHandler>;
     private readonly legacySessions = new Map<string, { clientId: string; server: ReturnType<typeof createToolServer>; transport: WebStandardStreamableHTTPServerTransport; lastUsedAt: number }>();
     private server: Server | null = null;
@@ -160,6 +194,134 @@ export class Bridge {
         this.sessionToken = createHmac('sha256', this.auth.webSessionSecret).update('web-session').digest('hex').slice(0, 32);
         this.csrfToken = createHmac('sha256', this.auth.webSessionSecret).update('web-csrf').digest('hex').slice(0, 32);
 
+        // —— 可选双模型执行器：默认关闭；关闭时不调用模型、不读取密钥内容 ——
+        this.decisionConfig = new DecisionConfigStore(this.paths);
+        this.decisionSecrets = new DecisionSecretStore(this.paths);
+        this.decisionStore = new DecisionStore(this.paths.decisionDb, { logger: ledgerLog });
+        if (this.decisionStore.writable) {
+            // 只有成功持有实例锁的 Bridge 启动路径会走到这里；doctor/静态页不得触发迁移。
+            try {
+                const recovery = this.decisionStore.recoverOnStartup();
+                this.decisionRecoveryDone = true;
+                if (recovery.recoveredTaskIds.length > 0) {
+                    this.logger.warn(`重启后有 ${String(recovery.recoveredTaskIds.length)} 个自动任务转入待复核，不会自动续跑。`);
+                }
+            } catch (error) {
+                this.logger.error('决策库启动恢复失败：' + (error instanceof Error ? error.message : String(error)));
+            }
+        }
+        this.decisionGame = new DecisionGamePort({
+            isRegisteredClient: (clientId) => this.auth.listClients().some(client => client.clientId === clientId),
+            actions: this.actions,
+            control: this.control,
+            ledger: this.ledger,
+            mod: this.mod,
+            config: this.decisionConfig,
+            logger: ledgerLog
+        });
+        const memoryStore = new MemoryStore(this.decisionStore);
+        this.decisionMemory = new DecisionMemoryService(memoryStore, this.decisionStore, this.decisionGame, this.decisionConfig);
+        this.taskService = new TaskService({
+            store: this.decisionStore,
+            events: { emit: (event) => this.events.publish(event.kind, { ...event.payload, taskId: event.taskId }) },
+            authz: this.decisionGame,
+            providers: {
+                resolveProvider: async (providerId) => {
+                    const entry = this.decisionConfig.current.providers.find((provider) => provider.id === providerId);
+                    if (!entry) return { error: '执行模型未配置：' + providerId };
+                    if (entry.authMode === 'bearer' && !this.decisionSecrets.hasProvider(entry)) {
+                        return { error: '执行模型凭据缺失。' };
+                    }
+                    const provider = createProvider(entry, this.decisionSecrets);
+                    return { provider, configRevision: this.decisionConfig.revision };
+                },
+                publicProviderIds: (clientId) => this.decisionGame.providerIdsFor(clientId)
+            },
+            tokens: this.decisionTokens,
+            game: this.decisionGame,
+            clock: systemClock,
+            enabled: () => this.decisionEnabled(),
+            defaults: () => ({
+                defaultProviderId: this.decisionConfig.current.defaultProviderId,
+                defaultPolicyId: this.decisionConfig.current.defaultPolicyId,
+                activeProfileId: this.decisionConfig.current.activeProfileId
+            }),
+            memory: memoryStore,
+            logger: ledgerLog
+        });
+        this.runner = new DecisionRunner({
+            store: this.decisionStore,
+            game: this.decisionGame,
+            authz: this.decisionGame,
+            providers: {
+                resolveProvider: async (providerId) => {
+                    const entry = this.decisionConfig.current.providers.find((provider) => provider.id === providerId);
+                    if (!entry) return { error: '执行模型未配置：' + providerId };
+                    // 与 TaskService 同一判定：Bearer 模式缺凭据要在启动 run 前明确失败。
+                    if (entry.authMode === 'bearer' && !this.decisionSecrets.hasProvider(entry)) {
+                        return { error: '执行模型凭据缺失。' };
+                    }
+                    return { provider: createProvider(entry, this.decisionSecrets), configRevision: this.decisionConfig.revision };
+                },
+                publicProviderIds: (clientId) => this.decisionGame.providerIdsFor(clientId)
+            },
+            events: { emit: (event) => this.events.publish(event.kind, { ...event.payload, taskId: event.taskId }) },
+            clock: systemClock,
+            enabled: () => this.decisionEnabled(),
+            bootId: this.bootId,
+            memory: memoryStore,
+            modelRequestTimeoutMs: (providerId) => {
+                const entry = this.decisionConfig.current.providers.find((provider) => provider.id === providerId);
+                return entry?.timeoutMs ?? 30_000;
+            },
+            onFinished: (taskId) => this.taskService.recordEpisode(taskId),
+            logger: ledgerLog
+        });
+        this.taskService.attachRunner(this.runner);
+        this.taskQuery = new TaskQueryService({
+            store: this.decisionStore,
+            service: this.taskService,
+            clock: systemClock,
+            isAdmin: (principal) => principal.transport === 'web',
+            sharingEnabled: () => this.decisionConfig.current.sharing.sharedTaskReadAcrossClients,
+            activeProfileId: () => this.decisionConfig.current.activeProfileId
+        });
+        this.toolRouter = new BridgeToolRouter({
+            actions: this.actions,
+            service: this.taskService,
+            query: this.taskQuery,
+            memory: this.decisionMemory,
+            tokens: this.decisionTokens,
+            game: this.decisionGame,
+            config: this.decisionConfig,
+            store: this.decisionStore,
+            enabled: () => this.decisionEnabled(),
+            stopLatched: () => this.decisionStore.isUserStopLatched()
+        });
+        this.decisionApi = new DecisionApi({
+            config: this.decisionConfig,
+            secrets: this.decisionSecrets,
+            service: this.taskService,
+            query: this.taskQuery,
+            memory: this.decisionMemory,
+            tokens: this.decisionTokens,
+            game: this.decisionGame,
+            store: this.decisionStore,
+            bootId: this.bootId,
+            enabled: () => this.decisionEnabled(),
+            stopLatched: () => this.decisionStore.isUserStopLatched(),
+            arm: (reason) => {
+                this.decisionStore.setUserStopLatched(false, null);
+                // 记录“玩家重新允许”的代次，便于审计“这次恢复是谁在什么时候放行的”。
+                const generation = Number(this.decisionStore.getMeta('decision_arm_generation') ?? '0');
+                this.decisionStore.setMeta('decision_arm_generation', String(Number.isSafeInteger(generation) ? generation + 1 : 1));
+                this.events.publish('decision_stop_latched', { latched: false, reason });
+            },
+            pauseForConfigChange: (reason) => this.pauseDecisionTasks(reason),
+            logger: ledgerLog
+        });
+        this.unsubscribeEvents = this.events.subscribe((event) => this.onBridgeEvent(event));
+
         this.mod.on('ready', (hello: unknown) => {
             this.logger.info('Mod 已就绪', { hello: hello ? 'ok' : 'null' });
             this.control.fromHello(this.mod.hello);
@@ -186,7 +348,7 @@ export class Bridge {
                         executeTool: (toolName, args, ctx) => {
                             this.registry.touch(ctx.clientId, ctx.clientName, ctx.transport);
                             this.registry.countCall(ctx.clientId);
-                            return this.actions.executeTool(toolName, args, ctx);
+                            return this.toolRouter.executeTool(toolName, args, ctx);
                         }
                     },
                     resolveContext: () => {
@@ -209,6 +371,135 @@ export class Bridge {
 
     presence(): ClientPresence[] {
         return this.registry.list();
+    }
+
+    // -----------------------------------------------------------------------
+    // 决策执行器生命周期（§18/§21）
+    // -----------------------------------------------------------------------
+    /** 功能开关：配置启用 + 配置可解析 + 任务库可写，缺一即视为禁用。 */
+    private decisionEnabled(): boolean {
+        return this.decisionConfig.current.enabled && this.decisionConfig.error === null && this.decisionStore.writable;
+    }
+
+    /** 配置/凭据变更：暂停进行中的自动任务并返回受影响 taskId。 */
+    private pauseDecisionTasks(reason: string): string[] {
+        const slot = this.decisionStore.currentSlot();
+        if (!slot) return [];
+        try {
+            const task = this.decisionStore.loadTask(slot.taskId);
+            if (!task) return [];
+            if (task.state !== 'running' && task.state !== 'queued' && task.state !== 'pausing') return [];
+            const running = this.runner.isRunning(task.taskId);
+            this.runner.pause(task.taskId, reason);
+            // 没有活动 run（刚接单尚未启动）时直接落 paused；否则会永远停在 pausing。
+            const target = running ? 'pausing' : 'paused';
+            if (task.state !== target) {
+                this.decisionStore.updateTask({
+                    ...task,
+                    state: target,
+                    phase: 'idle',
+                    pauseReason: reason.slice(0, 240),
+                    stateVersion: task.stateVersion + 1,
+                    updatedAt: new Date().toISOString()
+                }, task.stateVersion);
+            }
+            return [task.taskId];
+        } catch (error) {
+            this.logger.warn('暂停自动任务失败：' + (error instanceof Error ? error.message : String(error)));
+            return [];
+        }
+    }
+
+    /**
+     * 人工停止锁 + 立即失效执行 generation。
+     * latch=true 用于 F9 / 网页接管：用户必须回 Web 重新允许才能继续。
+     */
+    private haltDecisionTasks(reason: string, latch: boolean): void {
+        if (this.stopping) return;
+        // Stopping must win even when persisting the stop latch fails.
+        this.runner.invalidateAll(reason);
+        try {
+            if (latch) {
+                this.decisionStore.setUserStopLatched(true, reason);
+                this.events.publish('decision_stop_latched', { latched: true, reason });
+            }
+            const slot = this.decisionStore.currentSlot();
+            if (!slot) return;
+            const task = this.decisionStore.loadTask(slot.taskId);
+            if (!task) return;
+            if (task.state !== 'running' && task.state !== 'queued' && task.state !== 'pausing') return;
+            const unresolved = this.decisionStore.unresolvedActionIdsForTask(task.taskId);
+            this.decisionStore.updateTask({
+                ...task,
+                state: unresolved.length > 0 ? 'needs_review' : 'paused',
+                phase: 'idle',
+                pauseReason: reason.slice(0, 240),
+                blocker: unresolved.length > 0
+                    ? { code: 'RESULT_UNKNOWN', summary: '停止时有未决动作，需按原收据核对。', evidenceIds: [], raisedAt: new Date().toISOString() }
+                    : task.blocker,
+                stateVersion: task.stateVersion + 1,
+                updatedAt: new Date().toISOString()
+            }, task.stateVersion);
+        } catch (error) {
+            this.logger.warn('停止自动任务失败：' + (error instanceof Error ? error.message : String(error)));
+        }
+    }
+
+    /** 停机：有界等待 runner 收尾，避免关库后仍在写。 */
+    private async waitForRunner(timeoutMs: number): Promise<void> {
+        const deadline = Date.now() + timeoutMs;
+        const slot = this.decisionStore.currentSlot();
+        if (!slot) return;
+        while (Date.now() < deadline) {
+            if (!this.runner.isRunning(slot.taskId)) return;
+            await new Promise<void>((resolve) => setTimeout(resolve, 50));
+        }
+    }
+
+    /** 停机时把仍在运行的任务落成可解释状态：有未决动作则待复核，否则暂停。 */
+    private persistStoppingDecisionState(): void {
+        try {
+            const slot = this.decisionStore.currentSlot();
+            if (!slot) return;
+            const task = this.decisionStore.loadTask(slot.taskId);
+            if (!task) return;
+            if (task.state !== 'queued' && task.state !== 'running' && task.state !== 'pausing') return;
+            const unresolved = this.decisionStore.unresolvedActionIdsForTask(task.taskId);
+            this.decisionStore.updateTask({
+                ...task,
+                state: unresolved.length > 0 ? 'needs_review' : 'paused',
+                phase: 'idle',
+                pauseReason: 'Bridge 已停止，任务不再派发；恢复需重新获取上下文。',
+                stateVersion: task.stateVersion + 1,
+                updatedAt: new Date().toISOString()
+            }, task.stateVersion);
+            this.decisionStore.appendEvent(task.taskId, 'decision_bridge_stopping', { payload: { unresolved: unresolved.length } });
+        } catch (error) {
+            this.logger.warn('保存停机状态失败：' + (error instanceof Error ? error.message : String(error)));
+        }
+    }
+
+    /** 控制权变化事件 → 停止自动任务（F9/断线/接管属于独立中断源）。 */
+    private onBridgeEvent(event: { kind: string; payload: Record<string, unknown> }): void {
+        if (this.stopping) return;
+        if (event.kind === 'control_closed') {
+            const reason = typeof event.payload['reason'] === 'string' ? event.payload['reason'] : '';
+            if (reason === 'mod_control_changed') {
+                // F9：游戏端撤销控制代次 ⇒ 用户停止锁，主模型不能直接 resume。
+                this.haltDecisionTasks('游戏端撤销控制（F9）', true);
+            } else if (reason === 'world_changed') {
+                this.pauseDecisionTasks('世界或实例已变化，自动任务停下待复核');
+            }
+            return;
+        }
+        if (event.kind === 'control_takeover') {
+            this.haltDecisionTasks('人工接管', true);
+            return;
+        }
+        if (event.kind === 'mod_disconnected') {
+            // 断线不是用户停止：任务停下但不加停止锁，重连后可显式 resume。
+            this.pauseDecisionTasks('Mod 连接断开，自动任务已停下');
+        }
     }
 
     get port(): number {
@@ -252,18 +543,26 @@ export class Bridge {
         this.endpointOwned = true;
         this.logger.info(`Bridge 已监听 http://127.0.0.1:${port}/ （MCP: /mcp, Web: /）`);
         if (this.publicBase) this.logger.info(`外部展示地址：${this.publicBase.baseUrl}/ （MCP: ${publicMcpUrl(this.publicBase)}）`);
-        this.events.publish('bridge_started', { port, pid: process.pid });
+        this.events.publish('bridge_started', { port, pid: process.pid, bootId: this.bootId });
         return port;
     }
 
     async stop(): Promise<void> {
+        this.stopping = true;
         this.events.publish('bridge_stopping', {});
+        // 退出 fence 优先：先让 Runner generation 失效并中止模型请求，
+        // 再等待有界收尾，最后才关账本/任务库。
+        this.runner.invalidateAll('bridge_stopping');
+        await this.waitForRunner(4000);
+        this.persistStoppingDecisionState();
+        this.unsubscribeEvents();
         this.control.stop();
         await this.mcpHandler.close();
         await Promise.all([...this.legacySessions.values()].map(async session => { await session.transport.close(); await session.server.close(); }));
         this.legacySessions.clear();
         await this.mod.close();
         this.ledger.close();
+        this.decisionStore.close();
         this.releaseEndpoint();
         const server = this.server;
         this.server = null;
@@ -404,7 +703,7 @@ export class Bridge {
                         executeTool: (toolName, args, ctx) => {
                             this.registry.touch(ctx.clientId, ctx.clientName, ctx.transport);
                             this.registry.countCall(ctx.clientId);
-                            return this.actions.executeTool(toolName, args, ctx);
+                            return this.toolRouter.executeTool(toolName, args, ctx);
                         }
                     },
                     resolveContext: () => ({ clientId: client.clientId, clientName: client.clientName, transport: 'http' })
@@ -486,7 +785,7 @@ export class Bridge {
             this.registry.countCall(caller.clientId);
             const abort = new AbortController();
             res.once('close', () => { if (!res.writableFinished) abort.abort(); });
-            const result = await this.actions.executeTool(toolName, args, { ...caller, signal: abort.signal });
+            const result = await this.toolRouter.executeTool(toolName, args, { ...caller, signal: abort.signal });
             sendJson(res, 200, result);
             return;
         }
@@ -522,6 +821,9 @@ export class Bridge {
         }
 
         if (!requireWeb()) return;
+
+        // 决策执行器管理接口：与会话/CSRF 校验共用同一入口。
+        if (await this.decisionApi.handle(req, res, url)) return;
 
         if (pathname === '/api/v1/multiplayer' && method === 'GET') {
             const result = await this.actions.executeTool('stardew_multiplayer', { operation: 'status' }, { clientId: 'web', clientName: 'Web 控制台', transport: 'web' });
@@ -710,8 +1012,17 @@ export class Bridge {
         }
 
         if (method === 'POST' && pathname === '/api/v1/control/takeover') {
-            const result = await this.control.takeover('web_manual_takeover');
-            sendJson(res, 200, { ok: true, ...result });
+            // 先让后台模型循环与己方动作失效，再走原控制接管：
+            // 即使 Mod 离线导致 takeover 报错，执行循环也已经停下。
+            this.haltDecisionTasks('web_manual_takeover', true);
+            try {
+                const result = await this.control.takeover('web_manual_takeover');
+                sendJson(res, 200, { ok: true, ...result });
+            } catch (error) {
+                // 接管本身失败（例如 Mod 离线）不代表后台模型还在跑：fence 已经先行执行。
+                const fault = BridgeError.from(error).fault;
+                sendJson(res, 409, { ok: false, fault, note: '自动任务循环已先停止；游戏控制接管未成功，请检查 Mod 连接。' });
+            }
             return;
         }
 
@@ -797,6 +1108,13 @@ export class Bridge {
         this.logger.info(`问题包已导出：${path.basename(file)}`);
         return file;
     }
+}
+
+/** Provider 工厂：凭据只在请求时读取，实例不持有明文。 */
+function createProvider(entry: DecisionProviderEntry, secrets: DecisionSecretStore): DecisionProvider {
+    return createDecisionProvider(entry, {
+        authorizationHeader: (cfg) => secrets.authorizationHeader(cfg as DecisionProviderEntry)
+    });
 }
 
 async function readBodyMaybe(req: IncomingMessage, limit: number): Promise<Buffer | null> {

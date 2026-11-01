@@ -117,6 +117,25 @@ export function newToken(): string {
     return randomBytes(32).toString('hex');
 }
 
+/**
+ * 内部执行身份命名空间（`sab-internal-decision:`）保留给 Bridge 自己创建的控制会话。
+ * 客户端注册 / token 签发必须拒绝，否则外部 Agent 可以冒充执行器取得控制权。
+ */
+export const INTERNAL_CLIENT_PREFIX = 'sab-internal-decision:';
+
+export function assertExternalClientId(clientId: string): void {
+    if (typeof clientId !== 'string' || clientId.length === 0) {
+        throw new Error('clientId 不能为空。');
+    }
+    if (clientId.startsWith(INTERNAL_CLIENT_PREFIX)) {
+        throw new Error('该 clientId 属于 Bridge 内部保留命名空间，不能用于外部客户端。');
+    }
+    // web 只代表本机网页会话；外部 Bearer 用同名会绕过“Bearer 不能管理配置”的身份区分。
+    if (clientId === 'web') {
+        throw new Error('该 clientId 是本地 Web 管理会话的保留标识，不能签发给外部客户端。');
+    }
+}
+
 /** 已存在但权限过宽时修正为 0600（只处理本应用自己的文件）。 */
 export function enforceCredentialMode(paths: DataPaths): void {
     if (existsSync(paths.credentials)) ensureFileMode(paths.credentials, PRIVATE_FILE_MODE);
@@ -211,6 +230,7 @@ export class AuthStore {
     }
 
     issue(clientId: string, clientName?: string): ClientCredential {
+        assertExternalClientId(clientId);
         this.refresh();
         const existing = this.credentials.clients[clientId];
         const credential: ClientCredential = {
@@ -226,6 +246,7 @@ export class AuthStore {
     }
 
     rotate(clientId: string): ClientCredential {
+        assertExternalClientId(clientId);
         this.refresh();
         const existing = this.credentials.clients[clientId];
         const credential: ClientCredential = {
@@ -255,6 +276,8 @@ export class AuthStore {
         const token = match[1].trim();
         this.refresh();
         for (const credential of Object.values(this.credentials.clients)) {
+            // Legacy credentials must not turn reserved Web/internal identities into Bearer users.
+            if (credential.clientId === 'web' || credential.clientId.startsWith('sab-internal-decision:')) continue;
             if (secureEqual(credential.token, token)) {
                 return { clientId: credential.clientId, clientName: credential.clientName, credential };
             }

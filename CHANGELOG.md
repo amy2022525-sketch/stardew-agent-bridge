@@ -1,5 +1,27 @@
 # 变更记录
 
+## 未发布：可选双模型决策执行器（D1，已构建/已通过自动化测试，未做真实模型与实机验收）
+
+> 本轮已运行并通过：typecheck、build、Node 全量测试（297 项：292 通过、0 失败、5 跳过）、Mod 隔离测试（189 checks）、Windows 安装/回退 fixture（17 checks）、实际 Mod DLL 编译与 Windows 审计包验证（15 项）。另已完成部分隔离 Mock 浏览器验收、Docker bundle 构建，以及合成私密文件入包拒绝检查。
+> **未做真实模型调用、真实游戏操作、Linux 原生与 Docker 镜像运行验收；本功能尚未发布为发行包。**
+> 验收矩阵按实际覆盖标记 `auto_pass`、`browser_mock_pass`、`partial_pass` 与 `not_run`，见 `docs/DECISION_EXECUTOR_ACCEPTANCE.md`；独立复核细节见 `DECISION_EXECUTOR_HANDOVER_REPORT.md` §12。
+
+- 新增可选“AI 任务助手”：主模型经 MCP 派单，Bridge 用玩家配置的执行模型持续观察、决策、调用既有动作服务并核对结果。默认关闭，关闭时不加载模型配置或密钥。
+- 新增 `@sab/decision-core`：任务服务/查询、单任务执行循环（generation fence、串行写动作、预算、短期记忆与长期记忆、完成判定、卡点与未知动作处理）、DecisionEnvelope 严格解析、两种 provider 适配器（Responses / Chat 兼容）。
+- 新增四个工具：`stardew_context`、`stardew_task`、`stardew_task_status`、`stardew_memory`（工具面 29→33）；新增统一 `BridgeToolRouter`，任务工具不会被转发给 Mod。
+- 新增 Web API `/api/v1/decision/*` 与“AI 任务助手”面板（配置、检测、进度、暂停/取消/接管、arm、记忆）。
+- 新增 `decision.sqlite`（任务/run/步骤/事件/观察/动作引用/记忆）与独立 `decision/config.json`、`decision/secrets.json`；与旧 Bridge 文件隔离，密钥不回显。
+- 协议兼容扩展：`hello/snapshot.worldIdentity`（可选只读）与观察 `bounds/truncated`；修正 Mod 侧 `truncated` 的越界判断。
+- 生命周期：F9/网页接管会置用户停止锁并使执行 generation 失效；未知回执进入 `needs_review` 且保留 actionId；停机有界等待 Runner 收尾。
+- 补齐：custom 政策“工具×保护”准入表（buy/interact/menu/wait 不可开启）、每客户端 policy 权限、doctor 只读执行器摘要、Web 面板的分组/共享/完成候选复核、SSE `bootId` + 重连全量刷新、`verify-package` 禁止 decision 运行期数据入包。
+- 编译期修正：`EffectiveTaskBudget` 统一预算形状、`Clock.nowMs()`、`ModLinkStatus.writeCommands`、任务 blocker 错误码收窄、配置 revision 与 GET/PUT 一致性、`StallDetector` 连续失败计数、首帧快照前用 Hello 的 `worldGeneration` 签发临时 token。
+- 新增端到端自动化 `decision-e2e`（真实 Bridge + Mock Mod + 本地假模型）：验证派单、规划、选壶、浇水、机器验证完成与任务工具不转发；并修复“取得控制前读取暂停状态”导致真实游戏必然 `PAUSE_NOT_CONFIRMED` 的缺陷。
+- 修正 Web 管理权限：网页会话可暂停/取消/更新任意 Agent 的任务；`web` 作为保留标识不再能签发给 Bearer 客户端。
+- 独立复核修正：识别原生 soil/cropState 与补水源，写前重新观察并复查注册和政策，按实际槽位核对物品限制，传递只读查询结果，修复模型连接复用超时、首次模型配置丢值及完成进度/剩余工作显示。新增相应回归，Mock 场景不作为真实游戏验收。
+- 安全修正：出站地址判定修复 6to4 内嵌 IPv4 取错字段、IPv4-compatible/ULA 未按私网处理三个绕过（新增 `isAddressAllowed` 单测）。
+- 测试与工具：补充 `decision-config`/`decision-api` 用例；`private-output.mjs` 固定使用 `%SystemRoot%\System32` 下的 `whoami.exe`/`icacls.exe`，避免 Git Bash 的 coreutils `whoami` 抢先解析；`package-lock.json` 补入 `@sab/decision-core`。
+- 文档：新增 `docs/DECISION_EXECUTOR.md`、`docs/DECISION_EXECUTOR_ACCEPTANCE.md`、`docs/adr/DECISION_EXECUTOR.md`、`DECISION_EXECUTOR_HANDOVER_REPORT.md`；修订 PLAN/README/AGENT_GUIDE/CLIENTS/PROTOCOL/TROUBLESHOOTING/PLATFORM_MATRIX/RELEASE_CHECKLIST 与打包文档白名单。
+
 ## 0.2.0-preview.1 — 2026-10-29
 
 - 合并独立 MP1 与 Docker 工作区，保留原生单人能力、Web MCP 连接与 Linux 平台层；统一应用/Mod/镜像版本。

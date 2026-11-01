@@ -56,10 +56,13 @@ export async function startStack(options: {
     /** 制造“账本不可写”：把 ledger.sqlite 建成目录。 */
     breakLedger?: boolean;
     multiplayer?: MultiplayerStatus;
+    /** 在 Bridge 构造前准备数据目录（例如写入 decision/config.json 做隔离测试）。 */
+    prepareDataDir?: (dataDir: string, paths: ReturnType<typeof dataPaths>) => void;
 } = {}): Promise<Stack> {
     const dataDir = mkdtempSync(path.join(os.tmpdir(), 'sab-test-'));
     const paths = dataPaths(dataDir);
     const logger = new Logger({ level: 'error', paths, console: false });
+    options.prepareDataDir?.(dataDir, paths);
     if (options.breakLedger) {
         mkdirSync(paths.ledger, { recursive: true });
     }

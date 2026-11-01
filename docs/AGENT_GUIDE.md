@@ -70,3 +70,25 @@ stardew_session           # {operation:"end"} 结束时显式释放控制权
 下一步建议：<一个具体动作>
 异常：<错误码 + 现象，如果有>
 ```
+
+## 8. 把重复操作交给执行模型（可选，默认关闭）
+
+适用于“一大片同质操作”这类逐格微操收益低的场景。前提是玩家已在 Web 启用 AI 任务助手并配置了执行模型。
+
+```text
+1. stardew_context(current)      → 拿 contextToken（60 秒）与可用 provider/policy
+2. 结束自己的直接控制会话（若持有）
+3. stardew_task(submit)          → 目标 + 收紧限制 + 成功条件 + 预算
+4. stardew_task_status(wait)     → 等待变化；不要代调每一步移动/浇水
+5. completed / waiting_main / needs_review 分别处理
+```
+
+要点：
+
+- `accepted:true` 只代表接单成功，不代表完成。
+- 成功条件优先用 `crop_tiles_watered` / `at_tile` / `inventory_at_least`；只有人工判断时才用 `manual_review`。
+- 精确地块比“整片地”更容易得到 `verified_observation`。
+- 存在 `unresolvedActionIds` 时不要宣称完成，也不要换 `actionId` 重做。
+- 用户要求停止时调用 `stardew_task(cancel)`，不要只在聊天里说“已停止”。
+- 执行模型不继承你的模型账号或密钥；它由玩家单独配置。
+- 本项目不会唤醒已经结束的会话；你需要在宿主里轮询或由宿主重新调用。

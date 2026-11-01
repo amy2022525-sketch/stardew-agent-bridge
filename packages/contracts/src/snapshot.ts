@@ -86,6 +86,39 @@ export interface NormalizeContext {
 }
 
 /** 把 Mod 快照归一化为契约类型；缺失字段保持 null，不猜测。 */
+const CANONICAL_INT64_RE = /^-?(?:0|[1-9][0-9]*)$/;
+
+/** 校验并透传 Mod 的可选 worldIdentity；不合法或旧 Mod 缺失时返回 undefined。 */
+function normalizeWorldIdentity(value: unknown): SnapshotSummary['worldIdentity'] {
+    const raw = asRaw(value);
+    if (!raw) return undefined;
+    const worldId = str(raw.worldId);
+    const actorFarmerId = str(raw.actorFarmerId);
+    if (
+        raw.schemaVersion !== 1 ||
+        raw.source !== 'native_game' ||
+        !worldId ||
+        !actorFarmerId ||
+        !CANONICAL_INT64_RE.test(actorFarmerId)
+    ) {
+        return undefined;
+    }
+    return { schemaVersion: 1, source: 'native_game', worldId, actorFarmerId };
+}
+
+/** 从 Mod 观察 bounds/truncated 推导覆盖范围；缺 bounds 时不写 coverage。 */
+function deriveCoverage(location: string, observation: Raw | null): SnapshotSummary['coverage'] {
+    if (!observation) return undefined;
+    const bounds = asRaw(observation.bounds);
+    if (!bounds) return undefined;
+    const x = num(bounds.x);
+    const y = num(bounds.y);
+    const width = num(bounds.width);
+    const height = num(bounds.height);
+    if (x === null || y === null || width === null || height === null) return undefined;
+    return { location, bounds: { x, y, width, height }, complete: observation.truncated !== true };
+}
+
 export function normalizeSnapshot(rawInput: unknown, ctx: NormalizeContext): SnapshotSummary {
     const raw = asRaw(rawInput) ?? {};
     const player = asRaw(raw.player);
@@ -176,6 +209,8 @@ export function normalizeSnapshot(rawInput: unknown, ctx: NormalizeContext): Sna
         },
         shipping,
         truncated: observation ? observation.truncated === true : false,
+        worldIdentity: normalizeWorldIdentity(raw.worldIdentity),
+        coverage: deriveCoverage(str(raw.location) ?? 'unknown', observation),
         sampledAt: ctx.sampledAt ?? new Date().toISOString()
     };
 }
