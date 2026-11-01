@@ -1,10 +1,10 @@
 # Stardew Agent Bridge
 
-**0.2.0-preview.1** includes Windows and Linux x64 packages, a standalone SMAPI Mod, and Docker amd64 images plus the source/Compose toolkit. Download the matching files and checksums from [GitHub Releases](https://github.com/amy2022525-sketch/stardew-agent-bridge/releases).
+**v0.30 (application version 0.3.0, preview)** adds an optional AI task assistant and includes Windows/Linux x64 packages, a standalone SMAPI Mod, Docker amd64 images and the source/Compose toolkit. Download matching files and checksums from the [v0.30 release](https://github.com/amy2022525-sketch/stardew-agent-bridge/releases/tag/v0.30). The public tag is `v0.30`; package names, manifests and APIs use SemVer `0.3.0`.
 
-The `main` branch adds an optional task assistant: DSH, Codex or another primary agent delegates tasks, while the bridge calls an execution model configured in the web console. It is disabled by default and is **not included in the published 0.2.0-preview.1 packages**. Automated and partial isolated Mock browser checks have passed; real-model and gameplay acceptance remain pending. See the [user guide](docs/DECISION_EXECUTOR.md) and [verification report](DECISION_EXECUTOR_HANDOVER_REPORT.md).
+The task assistant lets DSH, Codex or another primary agent delegate tasks while the bridge calls an execution model configured in the web console. It is disabled by default; the older 0.2.0-preview.1 downloads do not contain it. Automated and partial isolated Mock browser checks have passed; real-model and gameplay acceptance remain pending. See the [release notes](docs/RELEASE_NOTES_v0.30.md), [user guide](docs/DECISION_EXECUTOR.md) and [verification report](DECISION_EXECUTOR_HANDOVER_REPORT.md).
 
-Docker game mode and MP1 are previews. Native Linux gameplay and two real multiplayer clients still require acceptance; automated/mock checks do not certify those. See [current validation](docs/RELEASE_VALIDATION_20261029.md), [Docker installation](docs/DOCKER_INSTALL.md), [Linux installation](docs/LINUX_INSTALL.md), and [MP1 setup](docs/MULTIPLAYER_INSTALL.md). Windows packages require Node >=22.13; Linux packages bundle Node. Images never include proprietary game files or saves.
+Docker game mode and MP1 are previews. Native Linux gameplay and two real multiplayer clients still require acceptance; automated/mock checks do not certify those. See [current validation](docs/RELEASE_VALIDATION_20261101.md), [Docker installation](docs/DOCKER_INSTALL.md), [Linux installation](docs/LINUX_INSTALL.md), and [MP1 setup](docs/MULTIPLAYER_INSTALL.md). Windows packages require Node >=22.13; Linux packages bundle Node. Images never include proprietary game files or saves.
 
 Earlier single-player checks are recorded in [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md). Those historical checks do not certify the new Linux, Docker or multiplayer paths. Fishing/combat, the full transaction/day-transition matrix, and complete tasks through DSH/Codex/Claude Code remain incomplete. No stable release has been published.
 
@@ -23,7 +23,7 @@ Agent host (DSH / Codex / Claude Code)
    │  standard MCP (Streamable HTTP, or the bundled stdio adapter)
    ▼
 Bridge (127.0.0.1:17655)  ← the single business core
-   ├── MCP surface: 33 `stardew_*` tools, including 4 optional decision tools on main
+   ├── MCP surface: 33 `stardew_*` tools, including 4 optional decision tools
    ├── Web console: status, timeline, host-config wizard, human takeover
    ├── Action ledger (SQLite): actionId dedup, terminal replay, unresolved actions
    └── Control: control session + lease + single writer

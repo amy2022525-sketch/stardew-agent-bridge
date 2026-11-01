@@ -1,6 +1,6 @@
 {
   "name": "@sab/tests",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "description": "契约、控制权、幂等与故障注入测试（含模拟 Mod）。",
   "type": "module",

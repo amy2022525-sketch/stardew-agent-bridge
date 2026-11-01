@@ -8,7 +8,7 @@
 import type { ActorContext, MultiplayerStatus, MultiplayerReceiptDetail } from './multiplayer.js';
 export const CONTRACTS_SCHEMA_VERSION = 1;
 export const BRIDGE_NAME = 'stardew-agent-bridge';
-export const BRIDGE_VERSION = '0.2.0-preview.1';
+export const BRIDGE_VERSION = '0.3.0';
 export const MOD_PROTOCOL = 'stardew-agent-bridge/1';
 export const MOD_PROTOCOL_VERSION = 1;
 

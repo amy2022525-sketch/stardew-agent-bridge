@@ -1,10 +1,10 @@
 # Stardew Agent Bridge
 
-> **0.2.0-preview.1**：Windows / Linux x64 原生包、独立 Mod、Docker amd64 镜像与源码工具包。Docker 与联机 MP1 为预览功能；真实 Linux 游戏与双客户端联机仍待实机验收。当前验证见 [RELEASE_VALIDATION_20261029.md](docs/RELEASE_VALIDATION_20261029.md)，历史单人验收见 [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md)。
+> **v0.30（程序版本 0.3.0，预览）**：新增可选 AI 任务助手，提供 Windows / Linux x64 原生包、独立 Mod、Docker amd64 镜像与源码工具包。真实模型、完整游戏任务、Linux 游戏和双客户端联机仍待验收。见 [更新说明](docs/RELEASE_NOTES_v0.30.md) 与 [本版验证说明](docs/RELEASE_VALIDATION_20261101.md)，历史单人验收保留在 [FINAL_TEST_REPORT.md](FINAL_TEST_REPORT.md)。
 
-下载：[GitHub Releases](https://github.com/amy2022525-sketch/stardew-agent-bridge/releases)。每版提供校验和，按平台选取，不需要下载全部镜像。
+下载：[v0.30 GitHub Release](https://github.com/amy2022525-sketch/stardew-agent-bridge/releases/tag/v0.30)。每版提供校验和，按平台选取，不需要下载全部镜像。发行标签按项目命名为 `v0.30`，包名、Mod 清单和 API 使用规范版本号 `0.3.0`。
 
-`main` 分支新增了可选“AI 任务助手”：由 DSH、Codex 等主 Agent 派单，项目持续调用网页中配置的执行模型。此功能默认关闭，尚未包含在已发布的 `0.2.0-preview.1` 发行包中；已通过自动化与部分隔离 Mock 浏览器检查，真实模型及游戏仍待验收。见 [使用说明](docs/DECISION_EXECUTOR.md) 与 [本轮复核报告](DECISION_EXECUTOR_HANDOVER_REPORT.md)。
+本版新增可选“AI 任务助手”：由 DSH、Codex 等主 Agent 派单，项目持续调用网页中配置的执行模型。此功能默认关闭，旧 `0.2.0-preview.1` 下载包不包含此功能。已通过自动化与部分隔离 Mock 浏览器检查，真实模型及游戏仍待验收。见 [使用说明](docs/DECISION_EXECUTOR.md) 与 [独立复核报告](DECISION_EXECUTOR_HANDOVER_REPORT.md)。
 
 | 发行包 | 用途 | 安装说明 |
 | --- | --- | --- |
@@ -14,7 +14,7 @@
 | Docker 三个镜像归档 | Bridge / 图形游戏环境 / Mod 编译工具，按需加载 | [Docker 安装](docs/DOCKER_INSTALL.md) |
 | Docker source ZIP | Compose、管理脚本、完整公开源码，可本地重建镜像 | [Docker 开发](docs/DOCKER_DEVELOPMENT.md) |
 
-历史首轮 Linux 验证记录保留在 [LINUX_VALIDATION_REPORT.md](LINUX_VALIDATION_REPORT.md)。已发布 `0.2.0-preview.1` 的测试数量、完整包和 Docker 验证以本页顶部的 2026-10-29 报告为准；`main` 分支新增任务助手的验证见上述本轮复核报告。
+历史首轮 Linux 验证记录保留在 [LINUX_VALIDATION_REPORT.md](LINUX_VALIDATION_REPORT.md)，上一版验证见 [2026-10-29 报告](docs/RELEASE_VALIDATION_20261029.md)。本版验证以页首的 2026-11-01 说明及发行附件 `RELEASE_MANIFEST.json` 为准；历史检查不会自动证明新增功能可用。
 
 让**任意本地 MCP Agent**（DSH、Codex CLI、Claude Code……）观察并操作真实的星露谷游戏：一个 SMAPI Mod + 一个常驻本机 Bridge + 一个 Web 控制台，共用同一套游戏能力与同一份动作账本。
 

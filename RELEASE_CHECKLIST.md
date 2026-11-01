@@ -1,5 +1,9 @@
 # 发布检查清单
 
+## 2026-11-01：v0.30（程序版本 0.3.0）
+
+用户已授权发布。本版按预览交付，GitHub tag 为 `v0.30`，`package.json.releaseTag` 记录这个标签；程序、Mod 和附件版本为 `0.3.0`。必须从最终同一提交准备 Windows、Linux、独立 Mod、Docker 源码和三个离线镜像，核对所有附件摘要、来源及成功 CI 后再公开草稿。更新说明见 [RELEASE_NOTES_v0.30.md](docs/RELEASE_NOTES_v0.30.md)，验证口径见 [RELEASE_VALIDATION_20261101.md](docs/RELEASE_VALIDATION_20261101.md)，最终提交、CI 与资产哈希以发行附件 `RELEASE_MANIFEST.json` 为准。真实模型/游戏及稳定版门槛不能因发行而标为通过。
+
 ## 2026-10-29：0.2.0-preview.1
 
 已授权发布公开预览版，当前检查结果统一见 [RELEASE_VALIDATION_20261029.md](docs/RELEASE_VALIDATION_20261029.md)。发布前必须通过当前 SHA 的构建、Node/C# 回归、安装器、完整包审计、Docker 镜像/无游戏 MCP 冒烟与 GitHub CI；Windows、Linux、独立 Mod、Docker 三镜像/源码工具包及 SHA256SUMS 一起交付。真实 Linux 游戏、Docker 游戏和 MP1 双客户端仍未验收，Release 必须标记 prerelease，不能据此勾选稳定版门槛。

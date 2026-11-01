@@ -37,7 +37,7 @@ jobs:
           [[ "$RELEASE_ID" =~ ^[0-9]+$ ]]
           [[ "$SOURCE_COMMIT" =~ ^[a-f0-9]{40}$ ]]
           gh api "repos/$GH_REPO/releases/$RELEASE_ID" > "$RUNNER_TEMP/destination.json"
-          jq -e '.draft == true and .prerelease == true and (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+-preview\\.[0-9]+$"))' "$RUNNER_TEMP/destination.json" > /dev/null
+          jq -e '.draft == true and .prerelease == true and (.tag_name | test("^v[0-9]+(\\.[0-9]+){1,2}(-preview\\.[0-9]+)?$"))' "$RUNNER_TEMP/destination.json" > /dev/null
           echo "RELEASE_TAG=$(jq -r .tag_name "$RUNNER_TEMP/destination.json")" >> "$GITHUB_ENV"
       - uses: actions/checkout@v7
         with:
@@ -52,7 +52,8 @@ jobs:
         run: |
           set -euo pipefail
           version=$(node -p 'require("./package.json").version')
-          test "v$version" = "$RELEASE_TAG"
+          expected_tag=$(node -p 'require("./package.json").releaseTag || "v" + require("./package.json").version')
+          test "$expected_tag" = "$RELEASE_TAG"
           image="local/stardew-agent-bridge:$TARGET"
           versioned="local/stardew-agent-bridge:$version-$TARGET"
           file=docker/Dockerfile

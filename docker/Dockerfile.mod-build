@@ -7,7 +7,7 @@ ARG SAB_GID=1000
 ARG SAB_SOURCE_COMMIT=unknown
 LABEL org.opencontainers.image.title="stardew-agent-bridge-mod-build" \
       org.opencontainers.image.source="https://github.com/amy2022525-sketch/stardew-agent-bridge" \
-      org.opencontainers.image.version="0.2.0-preview.1" \
+      org.opencontainers.image.version="0.3.0" \
       org.opencontainers.image.licenses="MIT" org.opencontainers.image.revision="${SAB_SOURCE_COMMIT}"
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 COPY --from=node-runtime /usr/local/LICENSE /opt/sab/licenses/node-LICENSE

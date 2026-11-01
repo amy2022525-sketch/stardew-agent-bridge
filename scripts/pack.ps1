@@ -65,11 +65,11 @@ $modManifest = Get-Content (Join-Path $modArtifacts 'manifest.json') -Raw -Encod
 if ($modManifest.Version -ne $version) { throw 'Mod 产物版本与当前发行版本不一致。' }
 Copy-Item (Join-Path $modArtifacts '*') (Join-Path $out 'mod') -Recurse -Force
 
-foreach ($doc in @('README.md', 'README.en.md', 'LICENSE', 'NOTICE.md', 'CHANGELOG.md', 'FINAL_TEST_REPORT.md')) {
+foreach ($doc in @('README.md', 'README.en.md', 'LICENSE', 'NOTICE.md', 'CHANGELOG.md', 'FINAL_TEST_REPORT.md', 'DECISION_EXECUTOR_HANDOVER_REPORT.md')) {
     $source = Join-Path $repo $doc
     if (Test-Path $source) { Copy-Item $source $out }
 }
-foreach ($doc in @('ACCEPTANCE.md', 'AGENT_GUIDE.md', 'CLIENTS.md', 'PROTOCOL.md', 'EVIDENCE.md', 'MIGRATION.md', 'TROUBLESHOOTING.md', 'MULTIPLAYER_INSTALL.md', 'MULTIPLAYER_ACCEPTANCE.md', 'DOCKER_INSTALL.md', 'PLATFORM_MATRIX.md', 'RELEASE_VALIDATION_20261029.md', 'DECISION_EXECUTOR.md', 'DECISION_EXECUTOR_ACCEPTANCE.md')) {
+foreach ($doc in @('ACCEPTANCE.md', 'AGENT_GUIDE.md', 'CLIENTS.md', 'PROTOCOL.md', 'EVIDENCE.md', 'MIGRATION.md', 'TROUBLESHOOTING.md', 'MULTIPLAYER_INSTALL.md', 'MULTIPLAYER_ACCEPTANCE.md', 'DOCKER_INSTALL.md', 'PLATFORM_MATRIX.md', 'RELEASE_VALIDATION_20261029.md', 'RELEASE_VALIDATION_20261101.md', 'RELEASE_NOTES_v0.30.md', 'DECISION_EXECUTOR.md', 'DECISION_EXECUTOR_ACCEPTANCE.md')) {
     $source = Join-Path $repo "docs\$doc"
     if (Test-Path $source) { Copy-Item $source (Join-Path $out 'docs') }
 }

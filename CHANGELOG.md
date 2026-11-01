@@ -1,9 +1,11 @@
 # 变更记录
 
-## 未发布：可选双模型决策执行器（D1，已构建/已通过自动化测试，未做真实模型与实机验收）
+## v0.30 — 2026-11-01（程序版本 0.3.0，预览）
+
+发行标签为 `v0.30`，程序、Mod 与发行附件使用三段版本号 `0.3.0`。本版重点为可选双模型任务助手；更新说明见 [RELEASE_NOTES_v0.30.md](docs/RELEASE_NOTES_v0.30.md)。
 
 > 本轮已运行并通过：typecheck、build、Node 全量测试（297 项：292 通过、0 失败、5 跳过）、Mod 隔离测试（189 checks）、Windows 安装/回退 fixture（17 checks）、实际 Mod DLL 编译与 Windows 审计包验证（15 项）。另已完成部分隔离 Mock 浏览器验收、Docker bundle 构建，以及合成私密文件入包拒绝检查。
-> **未做真实模型调用、真实游戏操作、Linux 原生与 Docker 镜像运行验收；本功能尚未发布为发行包。**
+> **任务助手未做真实模型调用与真实游戏验收。** 原生 Linux 游玩、Docker 游戏及 MP1 双客户端仍待验收。本版按预览发布，分发构建与无游戏 CI 的最终结果记录在发行附件 `RELEASE_MANIFEST.json`，不以 Mock 成功代替游戏验证。
 > 验收矩阵按实际覆盖标记 `auto_pass`、`browser_mock_pass`、`partial_pass` 与 `not_run`，见 `docs/DECISION_EXECUTOR_ACCEPTANCE.md`；独立复核细节见 `DECISION_EXECUTOR_HANDOVER_REPORT.md` §12。
 
 - 新增可选“AI 任务助手”：主模型经 MCP 派单，Bridge 用玩家配置的执行模型持续观察、决策、调用既有动作服务并核对结果。默认关闭，关闭时不加载模型配置或密钥。
@@ -21,6 +23,7 @@
 - 安全修正：出站地址判定修复 6to4 内嵌 IPv4 取错字段、IPv4-compatible/ULA 未按私网处理三个绕过（新增 `isAddressAllowed` 单测）。
 - 测试与工具：补充 `decision-config`/`decision-api` 用例；`private-output.mjs` 固定使用 `%SystemRoot%\System32` 下的 `whoami.exe`/`icacls.exe`，避免 Git Bash 的 coreutils `whoami` 抢先解析；`package-lock.json` 补入 `@sab/decision-core`。
 - 文档：新增 `docs/DECISION_EXECUTOR.md`、`docs/DECISION_EXECUTOR_ACCEPTANCE.md`、`docs/adr/DECISION_EXECUTOR.md`、`DECISION_EXECUTOR_HANDOVER_REPORT.md`；修订 PLAN/README/AGENT_GUIDE/CLIENTS/PROTOCOL/TROUBLESHOOTING/PLATFORM_MATRIX/RELEASE_CHECKLIST 与打包文档白名单。
+- 发行：统一 workspace、协议常量、Mod 和镜像版本；发行流程识别显式 `releaseTag`，保留草稿/预览与来源提交校验；补齐 Docker 依赖缓存层中的 decision-core 清单，以及原生包的当前更新说明和复核报告。
 
 ## 0.2.0-preview.1 — 2026-10-29
 

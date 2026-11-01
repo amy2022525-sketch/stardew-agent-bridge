@@ -52,7 +52,8 @@ jobs:
         run: |
           set -euo pipefail
           version=$(node -p 'require("./package.json").version')
-          test "v$version" = "$RELEASE_TAG"
+          expected_tag=$(node -p 'require("./package.json").releaseTag || "v" + require("./package.json").version')
+          test "$expected_tag" = "$RELEASE_TAG"
           filename="StardewAgentBridge-$version-mod.zip"
           gh release download "$RELEASE_TAG" --pattern "$filename" --dir "$RUNNER_TEMP/mod-input"
           printf '%s  %s\n' "$MOD_ZIP_SHA256" "$RUNNER_TEMP/mod-input/$filename" | sha256sum -c -

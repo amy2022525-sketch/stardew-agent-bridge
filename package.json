@@ -1,6 +1,6 @@
 {
   "name": "stardew-agent-bridge",
-  "version": "0.2.0-preview.1",
+  "version": "0.3.0",
   "private": true,
   "description": "星露谷本机 SMAPI 桥接 + Web 控制台 + MCP 服务：让支持 MCP 的本地 Agent 观察和游玩星露谷。",
   "license": "MIT",
@@ -48,5 +48,6 @@
     "@modelcontextprotocol/server": "2.3.1",
     "ajv": "8.20.0",
     "ws": "8.22.0"
-  }
+  },
+  "releaseTag": "v0.30"
 }
